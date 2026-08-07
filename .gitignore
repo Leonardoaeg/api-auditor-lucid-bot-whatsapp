@@ -1,0 +1,22 @@
+# Credenciales — NUNCA subir esto a GitHub
+accounts.local.json
+lucidsales.local.json
+*.local.json
+
+# Informes generados: contienen datos reales de clientes de cada instalación
+Informes/auditorias/*/
+Informes/auditorias/*.json
+Informes/auditorias/*.docx
+Informes/auditorias/*.md
+!Informes/auditorias/TEMPLATE_qualitative.json
+
+# Node
+node_modules/
+npm-debug.log*
+
+# Log del supervisor keep-alive.cmd
+keep-alive.log
+
+# Sistema
+.DS_Store
+Thumbs.db

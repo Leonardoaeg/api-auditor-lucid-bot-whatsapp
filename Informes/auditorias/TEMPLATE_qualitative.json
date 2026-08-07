@@ -1,0 +1,132 @@
+{
+  "cuenta": "000000",
+  "fecha": "2026-01-15",
+  "hallazgos": [
+    { "contact_id": "573000000001", "producto": "Producto A", "categoria": "venta_verificada", "nota": "Confirmó \"Correcto\" (x2). Cierre limpio." },
+    { "contact_id": "573000000002", "producto": "Producto A", "categoria": "venta_verificada", "nota": "Objeción de precio por audio, resuelta bajando de 2 a 1 unidad. Confirmó \"Siii\"." },
+    { "contact_id": "573000000003", "producto": "Producto A", "categoria": "venta_verificada", "nota": "Cliente recurrente (dos fechas previas). Confirmó \"Correctos\"." },
+    { "contact_id": "573000000004", "producto": "Producto B", "categoria": "venta_verificada", "nota": "Confirmó \"Si\". Cierre limpio." },
+    { "contact_id": "573000000005", "producto": "Producto B", "categoria": "venta_verificada", "nota": "Confirmó por audio \"Sí, sí, todo está correcto\"." },
+    { "contact_id": "573000000006", "producto": "Producto B", "categoria": "venta_verificada", "nota": "Consulta de talla muy detallada (peso/estatura), bot explicó bien, cerró con \"Confirmado\"." },
+    { "contact_id": "573000000007", "producto": "Producto B", "categoria": "venta_verificada", "nota": "Confirmó \"Si\". Cierre limpio." },
+    { "contact_id": "573000000008", "producto": "Producto B", "categoria": "intencion_sin_datos", "nota": "Dio talla/color, bot preguntó cantidad, sin respuesta al corte — posible conversación en curso." },
+    { "contact_id": "573000000009", "producto": "Producto B", "categoria": "intencion_sin_datos", "nota": "Quería una talla no disponible, bot ofreció la más cercana. Preguntó por fecha límite, bot confirmó llegada a tiempo. Dijo \"te confirmo en la tarde\" y no volvió." },
+    { "contact_id": "573000000010", "producto": "Producto B", "categoria": "venta_verificada", "nota": "Cliente recurrente. Confirmó \"Si\"." },
+    { "contact_id": "573000000011", "producto": "Producto B", "categoria": "venta_verificada", "nota": "Cliente recurrente. Confirmó \"Si\"." },
+    { "contact_id": "573000000012", "producto": "Producto B", "categoria": "intencion_sin_datos", "nota": "Preguntó calidad/precio por audio, bot respondió bien, silencio total tras conocer precio — nunca eligió color." },
+    { "contact_id": "573000000013", "producto": "Producto B", "categoria": "intencion_sin_datos", "nota": "Color y talla dados, precio conocido. Dijo \"Gracias\" (salida educada) y no volvió." },
+    { "contact_id": "573000000014", "producto": "Producto C", "categoria": "venta_verificada", "nota": "Confirmó \"Si\". Cierre limpio." },
+    { "contact_id": "573000000015", "producto": "Producto D", "categoria": "venta_verificada", "nota": "Bot confundió producto brevemente al inicio, se autocorrigió. Confirmó \"Correcto\"." },
+    { "contact_id": "573000000016", "producto": "Producto D", "categoria": "venta_verificada", "nota": "Confirmó, luego pidió cambio de dirección post-venta (a nombre de otra persona) — bot lo manejó bien, reconfirmó \"Correcto\"." },
+    { "contact_id": "573000000017", "producto": "Producto D", "categoria": "datos_sin_confirmar", "nota": "⚠️ BUG CRÍTICO: escribió \"Si correctos\" con datos completos, el bot NUNCA procesó la confirmación. Sin tag de compra, sin intento de subida. Venta perdida por falla técnica." },
+    { "contact_id": "573000000018", "producto": "Producto D", "categoria": "intencion_sin_datos", "nota": "OBJECIÓN CLARA: necesitaba el producto para una fecha puntual, el envío tarda más de lo que alcanza. Bot ofreció reservar, no sirvió para esa ocasión." },
+    { "contact_id": "573000000019", "producto": "Producto D", "categoria": "intencion_sin_datos", "nota": "Bot respondió inicialmente con info de otro producto antes de autocorregirse (glitch de identificación). Dio talla, silencio tras preguntar color 2 veces." },
+    { "contact_id": "573000000020", "producto": "Producto E", "categoria": "datos_sin_confirmar", "nota": "Fricción menor confirmando el barrio (bot tuvo que insistir), pero SÍ llegó a enviar resumen completo. Cliente nunca respondió tras verlo." },
+    { "contact_id": "573000000021", "producto": "Producto E", "categoria": "datos_sin_confirmar", "nota": "Flujo del bot impecable, resumen completo enviado. Cliente vio pero nunca confirmó." },
+    { "contact_id": "573000000022", "producto": "Producto F", "categoria": "intencion_sin_datos", "nota": "Preguntó precio DOS veces (incluso tras respuesta). Bot preguntó si apartaba — silencio total." },
+    { "contact_id": "573000000023", "producto": "Producto F", "categoria": "intencion_sin_datos", "nota": "Eligió talla y color ANTES de preguntar precio. Al conocerlo, silencio total — posible \"shock de precio\" tardío." },
+    { "contact_id": "573000000024", "producto": "Producto F", "categoria": "intencion_sin_datos", "nota": "Preguntó precio, bot respondió y preguntó color — silencio total." },
+    { "contact_id": "573000000025", "producto": "Producto F", "categoria": "intencion_sin_datos", "nota": "Preguntó precio TRES veces con variantes (posible duda de si varía por color). Dijo \"Gracias\" y no eligió color." },
+    { "contact_id": "573000000026", "producto": "Producto G", "categoria": "intencion_sin_datos", "nota": "OBJECIÓN DE CATÁLOGO: preguntó color 2 veces, al saber que solo viene en un color respondió con tono de desilusión, nunca dio talla." },
+    { "contact_id": "573000000027", "producto": "Producto H", "categoria": "venta_verificada", "nota": "Envío a una ciudad remota. Confirmó \"Correcto\"." },
+    { "contact_id": "573000000028", "producto": "Producto H", "categoria": "intencion_sin_datos", "nota": "Pidió fotos de colores, bot las envió, silencio total tras verlas." },
+    { "contact_id": "573000000029", "producto": "Producto H", "categoria": "intencion_sin_datos", "nota": "CALIENTE. Preguntó color/corte/precio en detalle (alto interés). Dijo \"Ya te confirmo\" y nunca volvió — el lead más avanzado que se enfrió." },
+    { "contact_id": "573000000030", "producto": "(no identificado — color mencionado sin producto claro)", "categoria": "intencion_sin_datos", "nota": "Preguntó precio 3 veces, bot repitió la MISMA pregunta de color 3 veces sin variar redacción. Cliente respondió con cosas tangenciales, nunca eligió." },
+    { "contact_id": "573000000031", "producto": "Varios (vitrineo: A/E/D)", "categoria": "intencion_sin_datos", "nota": "Indecisión entre productos, pidió ver fotos en general. Nunca fijó producto/talla/color." }
+  ],
+  "causa_raiz_por_producto": {
+    "Producto A": {
+      "mensaje_inicial": "Sin evidencia de objeción — muestra pequeña, pero las conversaciones que avanzaron cerraron bien.",
+      "cierre": "OK — cerraron sin fricción real (una con objeción de precio resuelta bajando cantidad).",
+      "reglas": "Sin hallazgos negativos en esta muestra.",
+      "veredicto": "Producto sin problemas detectados hoy — muestra insuficiente para generalizar."
+    },
+    "Producto B": {
+      "mensaje_inicial": "Sin evidencia de objeción — el producto con más ventas del día.",
+      "cierre": "Muy bueno en general; algunos casos se enfriaron con \"gracias\"/silencio DESPUÉS de conocer precio y talla — posible falta de urgencia o incentivo en el cierre.",
+      "reglas": "Una talla no disponible generó fricción en 1 caso (bot lo manejó bien ofreciendo alternativa). Nombre de producto inconsistente entre variantes del bot — revisar si es el mismo producto con nomenclatura inconsistente.",
+      "veredicto": "El mejor producto del día; el único ajuste es homogeneizar el nombre y añadir un empujón final para los que se enfrían tras conocer el precio."
+    },
+    "Producto D": {
+      "mensaje_inicial": "Sin evidencia de objeción al mensaje inicial.",
+      "cierre": "🔴 CRÍTICO: aquí ocurrió el bug de confirmación no procesada. También la única objeción de tiempo de entrega explícita del día ocurrió con este producto.",
+      "reglas": "Un glitch de identificación de producto (el bot respondió inicialmente sobre otro producto) en algunos casos — revisar el disparador/triggers de este producto en el flujo.",
+      "veredicto": "Prioridad de revisión técnica: el bug de confirmación se detectó específicamente en este producto — revisar ese flujo primero."
+    },
+    "Producto E": {
+      "mensaje_inicial": "Sin evidencia de objeción.",
+      "cierre": "🔴 0% de cierre en esta muestra — patrón preocupante aunque la muestra es pequeña.",
+      "reglas": "Fricción menor confirmando el barrio en un caso (el bot tuvo que insistir).",
+      "veredicto": "Vigilar de cerca: alto abandono justo en el paso final en esta muestra — repetir el monitoreo con más días antes de concluir, pero no descartar como señal real."
+    },
+    "Producto F": {
+      "mensaje_inicial": "Posible causa: el precio no está claro o suficientemente anticipado en el mensaje inicial — todas las conversaciones giraron en torno a preguntar el precio repetidamente.",
+      "cierre": "0 ventas en las conversaciones con intención — ninguna llegó siquiera a dar color/talla en firme.",
+      "reglas": "Patrón repetido: el bot no varía su respuesta cuando el cliente insiste en preguntar precio — se limita a repetir el dato y la pregunta de color.",
+      "veredicto": "🔴 Producto con la fuga más clara y consistente del día — revisar mensaje inicial y agregar una respuesta distinta cuando el precio se pregunta más de una vez."
+    },
+    "Producto G": {
+      "mensaje_inicial": "Sin evidencia directa (muestra de 1).",
+      "cierre": "No llegó a esa etapa.",
+      "reglas": "🟡 Objeción de catálogo: solo un color disponible, cliente mostró desilusión explícita.",
+      "veredicto": "Evaluar ampliar la oferta de color de este producto o manejar la expectativa mejor desde el mensaje inicial."
+    },
+    "Producto H": {
+      "mensaje_inicial": "Sin evidencia de objeción.",
+      "cierre": "1 venta, pero leads avanzados (uno Caliente) se enfriaron justo antes de dar datos, sin objeción verbalizada.",
+      "reglas": "Sin hallazgos de reglas rotas.",
+      "veredicto": "El cierre pierde a los leads más calientes en el último tramo — candidato ideal para un mensaje de seguimiento automático a las pocas horas de silencio."
+    },
+    "Producto C": {
+      "mensaje_inicial": "Sin evidencia de objeción (muestra de 1, venta).",
+      "cierre": "OK.",
+      "reglas": "Sin hallazgos.",
+      "veredicto": "Sin problemas detectados — muestra insuficiente."
+    }
+  },
+  "diagnostico_cualitativo": {
+    "por_producto": {
+      "Producto F": {
+        "confianza": "media",
+        "muestra_n": 4,
+        "pool_total": 4,
+        "causa_dominante": "objecion_precio",
+        "causas": {
+          "mensaje_inicial_contenido": 0,
+          "objecion_precio": 3,
+          "bot_error_contexto": 0,
+          "bot_alucina": 0,
+          "bot_incoherente": 0,
+          "bot_abandona_conversacion": 1,
+          "leads_baja_calidad": 0,
+          "sin_causa_clara": 0
+        },
+        "casos": [
+          { "contact_id": "573000000022", "causa": "objecion_precio", "cita": "cliente preguntó el precio dos veces seguidas y luego silencio total", "link_panel": "https://panel.lucidbot.co/en/inbox?acc=000000&id=573000000022" },
+          { "contact_id": "573000000099", "causa": "bot_abandona_conversacion", "cita": "\"No se sale del presupuesto. Gracias\" → bot: \"Te entiendo completamente... si más adelante deseas apartarla, me dices\"", "link_panel": "https://panel.lucidbot.co/en/inbox?acc=000000&id=573000000099" }
+        ]
+      }
+    }
+  },
+  "mensajes_lucid_sales": {
+    "fuente": "Lucid Sales — Dashboard Facebook Ads Mensajes (panel.lucidsales.co/metricas)",
+    "fecha": "15/01/2026",
+    "sincronizado_en": "2026-01-15 21:54 (Bogotá) — verificar lastSync antes de leer, forzar 'Sincronizar Insights' si está atrasado",
+    "total_mensajes_anuncio": 227,
+    "por_producto": [
+      { "producto": "Producto D", "mensajes": 78 },
+      { "producto": "Producto E", "mensajes": 84 },
+      { "producto": "Producto B", "mensajes": 65 }
+    ],
+    "detalle": "Suma del campo 'Mensajes' de la tabla /metricas, agrupado por la columna 'Producto' — mismo nombre que usa Lucid Bot para poder comparar."
+  },
+  "pedidos_lucid_sales": {
+    "fuente": "Lucid Sales — Métricas de LucidSales (panel.lucidsales.co/metricas-lucidsales), filtro Producto + fecha exacta",
+    "fecha": "15/01/2026",
+    "por_producto": [
+      { "producto": "Producto D", "pedidos_totales": 1, "confirmado": 1, "por_confirmar": 0, "cancelado": 0 },
+      { "producto": "Producto H", "pedidos_totales": 2, "confirmado": 1, "por_confirmar": 1, "cancelado": 0 }
+    ],
+    "nota": "'Pedidos totales' aquí es la fuente MÁS CONFIABLE del producto realmente vendido — si difiere de las ventas que Lucid Bot atribuye al mismo producto, puede ser señal de un bug de plantilla/atribución mezclando productos. 'Confirmado' vs 'Por confirmar' vs 'Cancelado' es un estado POSTERIOR a que Lucid Bot marque 'Pedidos Subidos' — una venta_verificada de Lucid Bot puede seguir 'Por confirmar' en Lucid Sales."
+  }
+}

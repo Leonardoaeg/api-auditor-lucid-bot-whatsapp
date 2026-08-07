@@ -1,0 +1,975 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<title>Auditoría Lucid Bot — Dashboard</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root {
+    --purple: #6B21A8;
+    --purple-light: #F3E8FF;
+    --green: #16A34A;
+    --red: #DC2626;
+    --amber: #D97706;
+    --gray: #6B7280;
+    --bg: #F8F7FB;
+    --card: #FFFFFF;
+    --border: #E5E1EC;
+    --text: #1F1B2E;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg); color: var(--text);
+  }
+  header {
+    background: linear-gradient(135deg, var(--purple), #9333EA);
+    color: white; padding: 24px 32px;
+  }
+  header h1 { margin: 0; font-size: 22px; }
+  header p { margin: 4px 0 0; opacity: 0.85; font-size: 14px; }
+  .container { max-width: 1100px; margin: 0 auto; padding: 24px 20px 60px; }
+  .controls {
+    background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+    padding: 20px; display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 24px;
+  }
+  .field { display: flex; flex-direction: column; gap: 4px; }
+  .field label { font-size: 12px; color: var(--gray); font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
+  select, input[type=date], input[type=time], input[type=text] {
+    border: 1px solid var(--border); border-radius: 8px; padding: 9px 12px; font-size: 14px; min-width: 180px;
+    background: white; color: var(--text);
+  }
+  input[type=time] { min-width: 110px; }
+  .datetime-group { display: flex; gap: 6px; }
+  button {
+    background: var(--purple); color: white; border: none; border-radius: 8px;
+    padding: 10px 20px; font-size: 14px; font-weight: 600; cursor: pointer;
+  }
+  button:hover { background: #5b1a8f; }
+  button.secondary { background: white; color: var(--purple); border: 1px solid var(--purple); }
+  button.secondary:hover { background: var(--purple-light); }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  #status { font-size: 13px; color: var(--gray); margin-left: 8px; }
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; margin-bottom: 24px; }
+  .kpi { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+  .kpi .num { font-size: 26px; font-weight: 700; color: var(--purple); }
+  .kpi .label { font-size: 12px; color: var(--gray); margin-top: 2px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 20px; }
+  .card h2 { margin: 0 0 14px; font-size: 16px; color: var(--purple); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; background: var(--purple-light); color: var(--purple); padding: 8px 10px; font-weight: 600; }
+  td { padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  .funnel-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .funnel-label { width: 240px; font-size: 13px; }
+  .funnel-bar-track { flex: 1; background: #EEE; border-radius: 6px; height: 20px; overflow: hidden; }
+  .funnel-bar { height: 100%; background: var(--purple); }
+  .funnel-pct { width: 70px; text-align: right; font-size: 13px; font-weight: 600; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 700; }
+  .badge.ok { background: #DCFCE7; color: var(--green); }
+  .badge.warn { background: #FEF3C7; color: var(--amber); }
+  .badge.bad { background: #FEE2E2; color: var(--red); }
+  a.link { color: var(--purple); text-decoration: none; font-size: 12px; }
+  a.link:hover { text-decoration: underline; }
+  .empty { color: var(--gray); font-size: 13px; font-style: italic; }
+  .pending-note { background: #FEF3C7; color: #92400E; padding: 12px 16px; border-radius: 8px; font-size: 13px; margin-bottom: 16px; white-space: pre-wrap; }
+  .pending-note b { display: block; margin-bottom: 6px; }
+  details.manage { background: var(--card); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 24px; }
+  details.manage > summary { padding: 14px 20px; cursor: pointer; font-weight: 600; color: var(--purple); list-style: none; }
+  details.manage > summary::-webkit-details-marker { display: none; }
+  details.manage > summary::before { content: '▸ '; }
+  details.manage[open] > summary::before { content: '▾ '; }
+  .manage-body { padding: 0 20px 20px; }
+  .store-form { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
+  .store-form .field { min-width: 160px; }
+  .store-form input[type=text], .store-form input[type=password] {
+    border: 1px solid var(--border); border-radius: 8px; padding: 9px 12px; font-size: 14px; width: 100%;
+    background: white; color: var(--text);
+  }
+  .hint { font-size: 12px; color: var(--gray); margin-top: 6px; }
+  .danger-note { background: #FEE2E2; color: #991B1B; padding: 10px 14px; border-radius: 8px; font-size: 12px; margin: 12px 0; }
+  button.danger { background: white; color: var(--red); border: 1px solid var(--red); padding: 5px 10px; font-size: 12px; }
+  button.danger:hover { background: #FEE2E2; }
+  button.link-btn { background: none; color: var(--purple); border: none; padding: 0; font-size: 12px; text-decoration: underline; cursor: pointer; }
+  .diag-section { background: linear-gradient(135deg, #F5F0FF, #FBF7FF); border: 1px solid var(--border); border-radius: 14px; padding: 24px; margin: 32px 0 20px; }
+  .diag-section > h2 { margin: 0 0 4px; font-size: 19px; color: var(--purple); }
+  .diag-section > p.sub { margin: 0 0 18px; font-size: 13px; color: var(--gray); }
+  .temp-row { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
+  .temp-chip { background: white; border: 1px solid var(--border); border-radius: 10px; padding: 10px 16px; min-width: 110px; }
+  .temp-chip .num { font-size: 20px; font-weight: 700; color: var(--purple); }
+  .temp-chip .label { font-size: 11px; color: var(--gray); }
+  .diag-global { background: white; border-radius: 10px; padding: 14px 16px; margin-bottom: 18px; border-left: 4px solid var(--border); }
+  .diag-global.nivel-alto { border-left-color: var(--red); }
+  .diag-global.nivel-medio { border-left-color: var(--amber); }
+  .diag-global.nivel-ok { border-left-color: var(--green); }
+  .diag-card { background: white; border-radius: 10px; padding: 14px 16px; margin-bottom: 12px; }
+  .diag-card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
+  .diag-card-head .prod-name { font-weight: 700; font-size: 14px; }
+  .diag-card-head .prod-stats { font-size: 12px; color: var(--gray); }
+  .signal { padding: 8px 12px; border-radius: 8px; font-size: 12.5px; margin-top: 6px; }
+  .signal.alto { background: #FEE2E2; color: #7F1D1D; }
+  .signal.medio { background: #FEF3C7; color: #78350F; }
+  .signal .rec { display: block; margin-top: 3px; color: inherit; opacity: 0.85; font-style: italic; }
+  .no-signal { font-size: 12.5px; color: var(--green); }
+</style>
+</head>
+<body>
+<header>
+  <h1>📊 Auditoría de Conversaciones — Lucid Bot</h1>
+  <p>Selecciona la tienda y el rango de fechas para correr la auditoría completa</p>
+</header>
+<div class="container">
+  <details class="manage" id="manage-stores">
+    <summary>⚙️ Gestionar tiendas (agregar, editar, eliminar)</summary>
+    <div class="manage-body">
+      <p class="hint">El "token de API de Lucid Bot" se saca dentro del panel de esa tienda en Ajustes → Integraciones. No es tu contraseña de inicio de sesión — nunca pidas ni guardes esa contraseña aquí ni en ningún otro lugar; Lucid Sales no tiene API, así que esos datos siempre se consultan iniciando sesión manualmente en el navegador cuando se necesiten.</p>
+      <table id="stores-table"><thead><tr><th>Tienda</th><th>Account ID</th><th>Nombre en Lucid Sales</th><th>Token</th><th></th></tr></thead><tbody></tbody></table>
+
+      <div class="store-form">
+        <div class="field"><label>Nombre de la tienda</label><input type="text" id="s-name" placeholder="Ej: Mi Tienda"></div>
+        <div class="field"><label>Account ID (Lucid Bot)</label><input type="text" id="s-accountid" placeholder="Ej: 123456"></div>
+        <div class="field"><label>Token de API (Lucid Bot)</label><input type="password" id="s-token" placeholder="accountId.xxxxxxx"></div>
+        <div class="field"><label>Nombre en Lucid Sales</label><input type="text" id="s-lucidsales" placeholder="Cómo aparece en el switcher de tiendas"></div>
+        <button id="s-save">Guardar tienda</button>
+        <button id="s-cancel" class="secondary" style="display:none">Cancelar edición</button>
+      </div>
+      <div id="s-status" class="hint"></div>
+    </div>
+  </details>
+
+  <details class="manage" id="history-panel" open>
+    <summary>📊 Cómo va la operación — histórico por tienda</summary>
+    <div class="manage-body">
+      <div class="field" style="margin-bottom:14px;">
+        <label>Mostrando datos de</label>
+        <select id="history-account" onchange="onHistoryAccountChange(this.value)"></select>
+      </div>
+      <p class="hint">Resumen de TODAS las auditorías ya guardadas de <b id="history-account-name">esta tienda</b> — no vuelve a llamar la API de Lucid Bot, así que no cuenta contra el límite de solicitudes.</p>
+      <div id="operacion-resumen"></div>
+      <details style="margin-top:14px;">
+        <summary style="cursor:pointer;font-weight:600;color:var(--purple);">Ver auditorías individuales</summary>
+        <table id="history-table" style="margin-top:10px;"><thead><tr><th>Fecha</th><th>Contactos</th><th>Ventas</th><th>Valor</th><th>Conversión</th><th>Cualitativo</th><th></th></tr></thead><tbody></tbody></table>
+      </details>
+      <div id="history-status" class="hint"></div>
+    </div>
+  </details>
+
+  <div class="controls">
+    <div class="field">
+      <label>Tienda</label>
+      <select id="account"></select>
+    </div>
+    <div class="field">
+      <label>Desde</label>
+      <div class="datetime-group">
+        <input type="date" id="from" />
+        <input type="time" id="from-time" />
+      </div>
+    </div>
+    <div class="field">
+      <label>Hasta</label>
+      <div class="datetime-group">
+        <input type="date" id="to" />
+        <input type="time" id="to-time" />
+      </div>
+    </div>
+    <button id="run">Ejecutar auditoría</button>
+    <button id="download" class="secondary" disabled>⬇ Descargar informe Word</button>
+    <button id="request-qual" class="secondary" disabled>📋 Pedir análisis cualitativo</button>
+    <span id="status"></span>
+  </div>
+
+  <div class="pending-note" style="background:#EFF6FF;color:#1E3A8A;">⚠️ Antes de pedir el análisis cualitativo o los mensajes de Lucid Sales: es UNA sola cuenta de Lucid Sales para todas las tiendas — verifica en el switcher (arriba a la izquierda del panel) que la tienda ACTIVA es la correcta antes de leer cualquier dato. Si el buscador de tiendas no encuentra el nombre esperado, no significa que falte acceso — revisa la lista completa.</div>
+
+  <div id="qual-copied" class="pending-note" style="display:none"></div>
+  <div id="results"></div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let currentAccountId = null, currentFrom = null, currentAccountName = null;
+
+let editingAccountId = null;
+
+async function loadAccounts() {
+  const res = await fetch('/api/accounts');
+  const accounts = await res.json();
+  const optionsHtml = accounts.map(a => `<option value="${a.id}">${a.name}</option>`).join('');
+  $('account').innerHTML = optionsHtml;
+  $('history-account').innerHTML = optionsHtml;
+  renderStoresTable(accounts);
+  return accounts;
+}
+
+function onHistoryAccountChange(accountId) {
+  $('account').value = accountId; // mantiene los dos selectores sincronizados
+  loadHistory(accountId);
+}
+
+function renderStoresTable(accounts) {
+  const tbody = document.querySelector('#stores-table tbody');
+  if (!accounts.length) {
+    tbody.innerHTML = `<tr><td colspan="5" class="empty">Sin tiendas configuradas todavía. Agrega la primera abajo.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = accounts.map(a => `
+    <tr>
+      <td>${a.name}</td>
+      <td>${a.id}</td>
+      <td>${a.lucidSalesStoreName}</td>
+      <td>${a.hasToken ? '•••••••• (guardado)' : '<span style="color:var(--red)">falta</span>'}</td>
+      <td>
+        <button class="link-btn" onclick="editStore('${a.id}','${a.name.replace(/'/g,"\\'")}','${a.lucidSalesStoreName.replace(/'/g,"\\'")}')">editar</button>
+        &nbsp;|&nbsp;
+        <button class="link-btn" style="color:var(--red)" onclick="deleteStore('${a.id}','${a.name.replace(/'/g,"\\'")}')">eliminar</button>
+      </td>
+    </tr>`).join('');
+}
+
+function editStore(accountId, name, lucidSalesStoreName) {
+  editingAccountId = accountId;
+  $('s-name').value = name;
+  $('s-accountid').value = accountId;
+  $('s-accountid').disabled = true;
+  $('s-token').value = '';
+  $('s-token').placeholder = 'Dejar vacío para no cambiar el token guardado';
+  $('s-lucidsales').value = lucidSalesStoreName;
+  $('s-cancel').style.display = 'inline-block';
+  $('manage-stores').open = true;
+  $('s-status').textContent = 'Editando "' + name + '". El token es opcional: solo ponlo si quieres reemplazarlo.';
+}
+
+function resetStoreForm() {
+  editingAccountId = null;
+  $('s-name').value = ''; $('s-accountid').value = ''; $('s-accountid').disabled = false;
+  $('s-token').value = ''; $('s-token').placeholder = 'accountId.xxxxxxx';
+  $('s-lucidsales').value = '';
+  $('s-cancel').style.display = 'none';
+  $('s-status').textContent = '';
+}
+
+async function deleteStore(accountId, name) {
+  if (!confirm(`¿Quitar "${name}" del selector de tiendas? Los informes ya guardados en su carpeta NO se borran.`)) return;
+  const res = await fetch(`/api/stores/${encodeURIComponent(accountId)}`, { method: 'DELETE' });
+  const data = await res.json();
+  if (!res.ok) { $('s-status').textContent = 'Error: ' + data.error; return; }
+  $('s-status').textContent = `"${name}" fue quitada del selector.`;
+  await loadAccounts();
+}
+
+$('s-save').addEventListener('click', async () => {
+  const name = $('s-name').value.trim();
+  const accountId = $('s-accountid').value.trim();
+  const token = $('s-token').value.trim();
+  const lucidSalesStoreName = $('s-lucidsales').value.trim() || name;
+  if (!name || !accountId) { $('s-status').textContent = 'Nombre y Account ID son obligatorios.'; return; }
+  try {
+    let res, data;
+    if (editingAccountId) {
+      res = await fetch(`/api/stores/${encodeURIComponent(editingAccountId)}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, token, lucidSalesStoreName }),
+      });
+    } else {
+      if (!token) { $('s-status').textContent = 'El token de API es obligatorio para una tienda nueva.'; return; }
+      res = await fetch('/api/stores', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accountId, name, token, lucidSalesStoreName }),
+      });
+    }
+    data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Error desconocido');
+    $('s-status').textContent = 'Guardado.';
+    resetStoreForm();
+    await loadAccounts();
+  } catch (err) {
+    $('s-status').textContent = 'Error: ' + err.message;
+  }
+});
+
+$('s-cancel').addEventListener('click', resetStoreForm);
+
+async function loadHistory(accountId) {
+  const tbody = document.querySelector('#history-table tbody');
+  const resumenEl = $('operacion-resumen');
+  if (!accountId) { tbody.innerHTML = ''; resumenEl.innerHTML = ''; return; }
+  if ($('history-account').value !== accountId) $('history-account').value = accountId;
+  $('history-status').textContent = 'Cargando historial...';
+  try {
+    const res = await fetch(`/api/history?accountId=${encodeURIComponent(accountId)}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Error desconocido');
+    $('history-account-name').textContent = data.accountName || 'esta tienda';
+    if (!data.items.length) {
+      tbody.innerHTML = `<tr><td colspan="7" class="empty">Sin auditorías guardadas todavía para esta tienda.</td></tr>`;
+      resumenEl.innerHTML = `<p class="empty">Corre tu primera auditoría abajo para empezar a ver el histórico de esta tienda.</p>`;
+    } else {
+      tbody.innerHTML = data.items.map(it => `
+        <tr>
+          <td>${it.fecha}${it.tuvo_advertencias ? ' <span class="badge bad" title="Esta auditoría tuvo advertencias — puede estar incompleta">⚠</span>' : ''}</td>
+          <td>${it.total_contactos ?? '-'}</td>
+          <td>${it.ventas ?? '-'}</td>
+          <td>${money(it.valor_total)}</td>
+          <td>${it.conversion_pct ?? 0}%</td>
+          <td>${it.tiene_cualitativo ? '✅' : '—'}</td>
+          <td>
+            <button class="link-btn" onclick="verHistorico('${accountId}','${it.fecha}')">ver</button>
+            &nbsp;|&nbsp;
+            <a class="link" href="/api/report?accountId=${encodeURIComponent(accountId)}&from=${it.fecha}">descargar</a>
+          </td>
+        </tr>`).join('');
+      resumenEl.innerHTML = renderOperacionResumen(data.resumen, data.accountName);
+    }
+    $('history-status').textContent = `${data.items.length} auditoría(s) guardada(s) para ${data.accountName}.`;
+  } catch (err) {
+    $('history-status').textContent = 'Error: ' + err.message;
+  }
+}
+
+let ultimoPorProductoPorFecha = {};
+
+function renderOperacionResumen(r, accountName) {
+  if (!r || !r.total_auditorias) return '';
+  ultimoPorProductoPorFecha = r.por_producto_por_fecha || {};
+  let html = `<div class="kpis" style="margin-bottom:14px;">
+    <div class="kpi"><div class="num">${r.total_auditorias}</div><div class="label">Auditorías guardadas</div></div>
+    <div class="kpi"><div class="num">${r.total_contactos}</div><div class="label">Contactos acumulados</div></div>
+    <div class="kpi"><div class="num">${r.total_ventas}</div><div class="label">Ventas acumuladas</div></div>
+    <div class="kpi"><div class="num">${money(r.valor_total)}</div><div class="label">Valor total acumulado</div></div>
+    <div class="kpi"><div class="num">${r.conversion_promedio}%</div><div class="label">Conversión promedio</div></div>
+    ${r.total_sospechosas > 0 ? `<div class="kpi" style="border-color:var(--red);"><div class="num" style="color:var(--red);">${r.total_sospechosas}</div><div class="label">Ventas sospechosas (todo el histórico)</div></div>` : ''}
+  </div>`;
+  if (r.por_producto && r.por_producto.length) {
+    html += `<table><thead><tr><th>Producto</th><th>Contactos (acum.)</th><th>Ventas (acum.)</th><th>Conversión</th><th>Valor (acum.)</th><th>Auditorías donde aparece</th></tr></thead><tbody>`;
+    for (const p of r.por_producto) {
+      html += `<tr><td>${p.producto}</td><td>${p.contactos}</td><td>${p.ventas}</td><td><span class="badge ${badgeFor(p.conversion_pct)}">${p.conversion_pct}%</span></td><td>${money(p.valor_total)}</td><td>${p.auditorias}</td></tr>`;
+    }
+    html += `</tbody></table>`;
+  }
+  const productosComparables = Object.keys(ultimoPorProductoPorFecha).sort();
+  if (productosComparables.length) {
+    html += `<div class="controls" style="margin-top:16px;">
+      <div class="field">
+        <label>📈 Comparar un producto entre auditorías (ej. un mismo producto entre dos fechas)</label>
+        <select id="comparar-producto-select" onchange="renderComparacionProducto(this.value)">
+          <option value="">Elige un producto...</option>
+          ${productosComparables.map(n => `<option value="${n.replace(/"/g,'&quot;')}">${n}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+    <div id="comparacion-producto-resultado"></div>`;
+  }
+  return html;
+}
+
+function renderComparacionProducto(nombre) {
+  const cont = $('comparacion-producto-resultado');
+  if (!cont) return;
+  if (!nombre) { cont.innerHTML = ''; return; }
+  const filas = ultimoPorProductoPorFecha[nombre] || [];
+  if (!filas.length) { cont.innerHTML = `<p class="empty">Sin datos guardados de "${nombre}".</p>`; return; }
+  let html = `<table><thead><tr><th>Fecha</th><th>Contactos</th><th>Msj. verificados</th><th>Ventas</th><th>Conversión</th><th>Valor</th><th>Sin bienvenida</th></tr></thead><tbody>`;
+  for (const f of filas) {
+    html += `<tr><td>${f.fecha}</td><td>${f.contactos}</td><td>${f.mensajes_verificados}</td><td>${f.ventas}</td><td><span class="badge ${badgeFor(f.conversion_pct)}">${f.conversion_pct}%</span></td><td>${money(f.valor_total)}</td><td>${f.sin_intencion_sin_bienvenida > 0 ? `<span style="color:var(--red);">${f.sin_intencion_sin_bienvenida}</span>` : '0'}</td></tr>`;
+  }
+  html += `</tbody></table><p class="hint">Cada fila es una auditoría guardada distinta — compara el mismo producto entre fechas para ver si mejora, empeora o se mantiene.</p>`;
+  cont.innerHTML = html;
+}
+
+async function verHistorico(accountId, fecha) {
+  $('history-status').textContent = `Cargando auditoría del ${fecha}...`;
+  try {
+    const res = await fetch(`/api/audit-file?accountId=${encodeURIComponent(accountId)}&fecha=${encodeURIComponent(fecha)}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Error desconocido');
+    render(data.reporte, data.accountName, data.qualitative);
+    currentAccountId = accountId; currentFrom = fecha; currentAccountName = data.accountName;
+    $('download').disabled = false;
+    $('request-qual').disabled = false;
+    $('history-status').textContent = `Mostrando auditoría guardada del ${fecha} (leída de disco, no es una consulta en vivo).`;
+    $('results').scrollIntoView({ behavior: 'smooth' });
+  } catch (err) {
+    $('history-status').textContent = 'Error: ' + err.message;
+  }
+}
+
+$('account').addEventListener('change', () => {
+  $('history-account').value = $('account').value; // mantiene los dos selectores sincronizados
+  loadHistory($('account').value);
+});
+
+function bogotaNow() {
+  // Hora Bogotá (UTC-5), no UTC — evita que el default quede un día/hora adelantado.
+  return new Date(Date.now() - 5 * 3600 * 1000);
+}
+function todayStr() { return bogotaNow().toISOString().slice(0, 10); }
+function nowTimeStr() { return bogotaNow().toISOString().slice(11, 16); }
+
+function pct(n, total) { return total ? ((100 * n) / total).toFixed(1) + '%' : '0%'; }
+function money(n) { return '$' + Number(n || 0).toLocaleString('es-CO'); }
+
+function badgeFor(pctNum) {
+  if (pctNum >= 50) return 'ok';
+  if (pctNum >= 15) return 'warn';
+  return 'bad';
+}
+
+function render(reporte, accountName, qualitative) {
+  const total = reporte.total_contactos;
+  const e = reporte.embudo;
+  const funnelStages = [
+    ['Sin intención (solo mensaje inicial)', e.sin_intencion],
+    ['Intención sin datos (Tibio/Caliente)', e.intencion_sin_datos],
+    ['Datos sin confirmar', e.datos_sin_confirmar],
+    ['Confirmada no subida (error)', e.confirmada_no_subida],
+    ['Venta verificada', e.venta_verificada],
+  ];
+  const maxVal = Math.max(...funnelStages.map(s => s[1]), 1);
+  // Solo mostrar todo lo relacionado a canal API/Shopify si esta tienda realmente tiene
+  // actividad en el pipeline "Pedidos - Landing" (o etiqueta Shopify) en esta auditoría —
+  // si da 0, la tienda no usa esa integración y la columna/tarjeta es puro ruido.
+  const hasShopify = !!(reporte.canal_pedidos && reporte.canal_pedidos.api_shopify.contactos > 0);
+
+  let html = '';
+
+  if (reporte.advertencias && reporte.advertencias.length) {
+    html += `<div class="pending-note" style="background:#FEE2E2;color:#991B1B;"><b>⚠️ Advertencia: la auditoría pudo quedar incompleta.</b>${reporte.advertencias.join('\n')}\n\nVuelve a correrla antes de confiar en estos números.</div>`;
+  }
+
+  const nombresProducto = Object.keys(reporte.por_producto).filter(k => k !== '(sin producto identificado)').sort();
+  if (nombresProducto.length) {
+    html += `<div class="controls" style="margin-bottom:20px;">
+      <div class="field">
+        <label>Filtrar por producto</label>
+        <select id="filtro-producto" onchange="applyProductFilter(this.value)">
+          <option value="">Todos los productos</option>
+          ${nombresProducto.map(n => `<option value="${n.replace(/"/g,'&quot;')}">${n}</option>`).join('')}
+        </select>
+      </div>
+    </div>`;
+  }
+
+  html += `<div class="kpis">
+    <div class="kpi"><div class="num">${total}</div><div class="label">Contactos analizados</div></div>
+    <div class="kpi"><div class="num">${reporte.ventas.cantidad}</div><div class="label">Ventas verificadas</div></div>
+    <div class="kpi"><div class="num">${reporte.conversion_pct}%</div><div class="label">Conversión</div></div>
+    <div class="kpi"><div class="num">${money(reporte.ventas.valor_total)}</div><div class="label">Valor total ventas</div></div>
+    <div class="kpi"><div class="num">${reporte.errores_subida.cantidad}</div><div class="label">Errores de subida</div></div>
+  </div>`;
+
+  html += renderConversaciones(reporte.conversaciones, hasShopify);
+
+  html += `<div class="card"><h2>Contactos y mensajes — fuentes oficiales</h2>
+    <div class="temp-row" style="margin-bottom:12px;">
+      <div class="temp-chip" style="border-color:var(--green);"><div class="num" style="color:var(--green);">${reporte.mensajes.verificados.cantidad}</div><div class="label">Mensajes verificados (${reporte.mensajes.verificados.contactos} contactos sin historial previo)</div></div>
+      <div class="temp-chip"><div class="num" style="color:var(--gray);">${reporte.mensajes.no_verificados.cantidad}</div><div class="label">Mensajes no verificables (${reporte.mensajes.no_verificados.contactos} contactos recurrentes/otra fecha)</div></div>
+    </div>
+    <p class="empty">✅ Los "mensajes verificados" son un PISO real (mínimo garantizado) de este rango: contactos sin ninguna otra oportunidad en ningún pipeline ni fecha, así que Interacciones no puede incluir mensajes de otra visita. Pero ⚠ el propio campo "Interacciones" SUBCUENTA los mensajes reales — confirmado 2026-07-26 comparando contra un chat real (marcó 7 donde la conversación tenía ~11 mensajes) — así que el número verdadero de mensajes es igual o mayor a lo mostrado aquí, nunca menor. Los "no verificables" son de contactos recurrentes o ventas de otra fecha, donde además puede mezclar visitas distintas.</p>
+    <p class="empty" style="margin-top:8px;">Para "Contactos nuevos" y "Mensajes reales bot+humano" (cifra oficial de Lucid Bot, sin desglose por producto) consulta Lucid Bot → Reportes → Analíticas; para "Mensajes de anuncio (Meta)" consulta Lucid Sales → Métricas Facebook Ads.</p>
+  </div>`;
+
+  html += `<div class="card"><h2>Embudo</h2>`;
+  for (const [label, val] of funnelStages) {
+    const w = (100 * val) / maxVal;
+    html += `<div class="funnel-row">
+      <div class="funnel-label">${label}</div>
+      <div class="funnel-bar-track"><div class="funnel-bar" style="width:${w}%"></div></div>
+      <div class="funnel-pct">${val} (${pct(val, total)})</div>
+    </div>`;
+  }
+  html += `</div>`;
+
+  html += renderEmbudoPorProducto(reporte.por_producto);
+
+  html += `<div class="card"><h2>Ventas verificadas (${reporte.ventas.cantidad})</h2>`;
+  if (reporte.ventas.detalle.length) {
+    html += `<table><thead><tr><th>Contacto</th><th>Producto</th><th>Valor</th>${hasShopify ? '<th>Canal</th>' : ''}<th>Etiqueta Lucid Sales</th><th></th></tr></thead><tbody>`;
+    for (const v of reporte.ventas.detalle) {
+      const prod = (v.producto_interes && v.producto_interes !== 'NO_MATCH') ? v.producto_interes : (v.pedido?.resumen.split('—')[0].replace(/^\d+\s*x\s*/, '').trim() || '-');
+      const sospechosa = v.tag_fallo_subida || v.tag_fallo_modificar;
+      const tagLabel = v.tag_fallo_subida ? '🔴 Fallo al subir' : v.tag_fallo_modificar ? '🔴 Fallo al modificar'
+        : v.tag_pedido_subido ? '✅ Pedido subido' : v.tag_compra_realizada ? '✅ Compra realizada'
+        : v.tag_avance_posterior ? '✅ Avanzó (entregado/en reparto/modificado)'
+        : (v.tag_pedido_subido === undefined ? '—' : '⚪ Sin etiqueta de subida (no es error, solo falta la etiqueta específica)');
+      const canalCell = hasShopify ? `<td>${v.via_api_shopify ? '🛒 API/Shopify' : '💬 Chat WhatsApp'}</td>` : '';
+      html += `<tr data-producto="${prod.replace(/"/g,'&quot;')}"${sospechosa ? ' style="background:#FEF3C7;"' : ''}><td>${v.contact_id}</td><td>${prod}</td><td>${money(v.pedido?.value)}</td>${canalCell}<td>${tagLabel}</td><td><a class="link" href="${v.link_panel}" target="_blank" rel="noopener noreferrer">ver chat →</a></td></tr>`;
+    }
+    html += `</tbody></table>
+      <p class="hint">"Etiqueta Lucid Sales" cruza la etapa del pipeline contra la etiqueta real aplicada en Lucid Sales — filas resaltadas en amarillo tienen una etiqueta de FALLO real (no solo ausencia de etiqueta), evidencia fuerte del bug "confirmado pero no subido".</p>`;
+  } else {
+    html += `<p class="empty">Sin ventas en el rango.</p>`;
+  }
+  html += `</div>`;
+
+  if (hasShopify) {
+    const cp = reporte.canal_pedidos;
+    const row = (label, b) => `<tr><td>${label}</td><td>${b.contactos}</td><td>${b.mensajes}</td><td style="color:var(--green);font-weight:600;">${b.ventas_confirmadas}</td><td>${money(b.valor_ventas)}</td><td>${b.sin_confirmar}</td><td>${b.error_subida}</td><td>${b.subidos_a_lucidsales}</td><td style="color:${b.no_subidos_a_lucidsales > 0 ? 'var(--red)' : 'inherit'};">${b.no_subidos_a_lucidsales}</td></tr>`;
+    html += `<div class="card"><h2>Canal de confirmación del pedido — API/Shopify vs Chat WhatsApp</h2>
+      <table><thead><tr><th>Canal</th><th>Contactos</th><th>Mensajes</th><th>Ventas confirmadas</th><th>Valor</th><th>Sin confirmar</th><th>Error subida</th><th>✅ Subidos a Lucid Sales</th><th>⚪ No subidos</th></tr></thead><tbody>
+        ${row('🛒 API / Shopify (Landing)', cp.api_shopify)}
+        ${row('💬 Chat WhatsApp', cp.chat_whatsapp)}
+      </tbody></table>
+      <p class="empty">${cp.nota}</p>
+    </div>`;
+  }
+
+  if (reporte.ventas.sospechosas && reporte.ventas.sospechosas.cantidad > 0) {
+    html += `<div class="card" style="border:2px solid var(--red);"><h2>🔴 Ventas sospechosas — posible bug de confirmado-no-subido (${reporte.ventas.sospechosas.cantidad})</h2>
+      <p class="empty">${reporte.ventas.sospechosas.nota}</p>
+      <table><thead><tr><th>Contacto</th><th>Producto</th><th>Valor</th><th></th></tr></thead><tbody>`;
+    for (const c of reporte.ventas.sospechosas.detalle) {
+      html += `<tr data-producto="${(c.producto_interes || '').replace(/"/g,'&quot;')}"><td>${c.contact_id}</td><td>${c.producto_interes || '-'}</td><td>${money(c.pedido?.value)}</td><td><a class="link" href="${c.link_panel}" target="_blank" rel="noopener noreferrer">ver chat →</a></td></tr>`;
+    }
+    html += `</tbody></table></div>`;
+  }
+
+  html += `<div class="card"><h2>Por producto</h2>
+    <table><thead><tr><th>Producto</th><th>Contactos</th><th>Mensajes ✅ verificados</th><th>Mensajes ⚪ no verificables</th><th>Ventas</th>${hasShopify ? '<th>🛒 Shopify</th><th>💬 WhatsApp</th>' : ''}<th>Conversión</th><th>Recurrentes</th><th>Ventas mismo día</th><th>Ventas otra fecha</th></tr></thead><tbody>`;
+  const productos = Object.entries(reporte.por_producto).filter(([k]) => k !== '(sin producto identificado)').sort((a, b) => b[1].total_contactos - a[1].total_contactos);
+  for (const [nombre, d] of productos) {
+    const shopifyCells = hasShopify ? `<td>${d.ventas_shopify || 0}</td><td>${d.ventas_whatsapp || 0}</td>` : '';
+    html += `<tr data-producto="${nombre.replace(/"/g,'&quot;')}"><td>${nombre}</td><td>${d.total_contactos}</td><td style="color:var(--green);font-weight:600;">${d.mensajes_verificados || 0}</td><td>${d.mensajes_no_verificados || 0}</td><td>${d.ventas}</td>${shopifyCells}<td><span class="badge ${badgeFor(d.conversion_pct)}">${d.conversion_pct}%</span></td><td>${d.contactos_recurrentes || 0}</td><td>${d.ventas_mismo_dia || 0}</td><td>${d.ventas_otra_fecha || 0}</td></tr>`;
+  }
+  html += `</tbody></table>
+    <p class="empty">✅ "Mensajes verificados" = PISO real (mínimo garantizado) de contactos SIN historial previo — Interacciones no puede mezclar otra visita para ellos. ⚠ Pero Interacciones subcuenta los mensajes reales (confirmado: 7 registrados vs ~11 reales en un chat verificado), así que el número verdadero es igual o mayor. "⚪ No verificables" = Interacciones de contactos recurrentes o ventas de otra fecha, donde además podría mezclar visitas distintas.</p>
+    <p class="hint">"Recurrentes" = contactos que ya habían escrito antes en otra fecha. "Ventas otra fecha" = confirmaron dentro del rango pero la conversación empezó antes — no se pierden, pero no son "ventas del día" en sentido estricto.</p>
+  </div>`;
+
+  html += renderMensajeInicialPorProducto(reporte.mensaje_inicial_por_producto);
+
+  if (reporte.atribucion_producto && reporte.atribucion_producto.cantidad > 0) {
+    html += `<div class="card" style="border:2px solid var(--amber, #D97706);"><h2>🎯 Atribución de anuncio incorrecta (${reporte.atribucion_producto.cantidad})</h2>
+      <p class="empty">${reporte.atribucion_producto.nota}</p>
+      <table><thead><tr><th>Contacto</th><th>Producto del anuncio (Ad ID)</th><th>Producto real vendido</th><th>Categoría</th><th></th></tr></thead><tbody>`;
+    for (const c of reporte.atribucion_producto.detalle) {
+      html += `<tr data-producto="${(c.producto_real_vendido || '').replace(/"/g,'&quot;')}"><td>${c.contact_id}</td><td>${c.producto_ad_id}</td><td><strong>${c.producto_real_vendido}</strong></td><td>${c.categoria}</td><td><a class="link" href="${c.link_panel}" target="_blank" rel="noopener noreferrer">ver chat →</a></td></tr>`;
+    }
+    html += `</tbody></table></div>`;
+  }
+
+  if (reporte.devoluciones_excluidas && reporte.devoluciones_excluidas.cantidad > 0) {
+    html += `<div class="card" style="border:2px solid var(--amber, #D97706);"><h2>↩️ Devoluciones excluidas del conteo (${reporte.devoluciones_excluidas.cantidad})</h2>
+      <p class="empty">${reporte.devoluciones_excluidas.nota}</p>
+      <table><thead><tr><th>Contacto</th><th>Producto</th><th>Valor</th><th></th></tr></thead><tbody>`;
+    for (const c of reporte.devoluciones_excluidas.detalle) {
+      html += `<tr data-producto="${(c.producto_interes || '').replace(/"/g,'&quot;')}"><td>${c.contact_id}</td><td>${c.producto_interes || '-'}</td><td>${money(c.pedido?.value)}</td><td><a class="link" href="${c.link_panel}" target="_blank" rel="noopener noreferrer">ver chat →</a></td></tr>`;
+    }
+    html += `</tbody></table></div>`;
+  }
+
+  if (reporte.contactos_recurrentes && reporte.contactos_recurrentes.cantidad > 0) {
+    html += `<div class="card"><h2>🔁 Contactos recurrentes (${reporte.contactos_recurrentes.cantidad})</h2>
+      <p class="empty">${reporte.contactos_recurrentes.nota}</p>
+      <table><thead><tr><th>Contacto</th><th>Producto</th><th>Veces en el historial</th><th>Interacciones</th><th></th></tr></thead><tbody>`;
+    for (const c of reporte.contactos_recurrentes.detalle) {
+      html += `<tr data-producto="${(c.producto_interes || '').replace(/"/g,'&quot;')}"><td>${c.contact_id}</td><td>${c.producto_interes || '-'}</td><td>${c.veces_total_historial}</td><td>${c.interacciones}</td><td><a class="link" href="${c.link_panel}" target="_blank" rel="noopener noreferrer">ver chat →</a></td></tr>`;
+    }
+    html += `</tbody></table></div>`;
+  }
+
+  if (reporte.ventas.otra_fecha && reporte.ventas.otra_fecha.cantidad > 0) {
+    html += `<div class="card"><h2>📅 Ventas confirmadas en el rango, de otra fecha (${reporte.ventas.otra_fecha.cantidad})</h2>
+      <p class="empty">${reporte.ventas.otra_fecha.nota}</p>
+      <table><thead><tr><th>Contacto</th><th>Producto</th><th>Creado</th><th>Confirmado</th><th></th></tr></thead><tbody>`;
+    for (const c of reporte.ventas.detalle.filter(v => v.pedido?.venta_de_otra_fecha)) {
+      html += `<tr data-producto="${(c.producto_interes || '').replace(/"/g,'&quot;')}"><td>${c.contact_id}</td><td>${c.producto_interes || '-'}</td><td>${c.pedido.fecha_creacion}</td><td>${c.pedido.fecha_confirmacion}</td><td><a class="link" href="${c.link_panel}" target="_blank" rel="noopener noreferrer">ver chat →</a></td></tr>`;
+    }
+    html += `</tbody></table></div>`;
+  }
+
+  html += `<div class="card"><h2>Revisión dirigida (${reporte.revision_dirigida.length} chats candidatos a leer)</h2>
+    <table><thead><tr><th>Contacto</th><th>Motivo</th><th></th></tr></thead><tbody>`;
+  for (const r of reporte.revision_dirigida) {
+    html += `<tr data-producto="${(r.producto_interes || '').replace(/"/g,'&quot;')}"><td>${r.contact_id}</td><td>${r.motivo}</td><td><a class="link" href="${r.link_panel}" target="_blank" rel="noopener noreferrer">ver chat →</a></td></tr>`;
+  }
+  html += `</tbody></table></div>`;
+
+  if (reporte.contactos_detalle && reporte.contactos_detalle.length) {
+    const catLabel = {
+      venta_verificada: '✅ Venta verificada', confirmada_no_subida: '🔴 Error de subida',
+      datos_sin_confirmar: '🟡 Sin confirmar', revision_manual: '⚪ Revisión manual',
+      intencion_sin_datos: '🔵 Interés sin datos', sin_intencion: '⚫ Sin intención',
+    };
+    html += `<div class="card"><details><summary style="cursor:pointer;"><h2 style="display:inline;">📋 Detalle completo de contactos (${reporte.contactos_detalle.length}) — todas las categorías</h2></summary>
+      <p class="hint">Incluye TODOS los contactos del rango, no solo los priorizados en "Revisión dirigida" — usa el filtro por producto arriba para ver solo un producto. Útil para pedir el detalle completo de un producto específico.</p>
+      <table><thead><tr><th>Contacto</th><th>Producto</th><th>Estado</th><th>Interacciones</th><th>Bienvenida enviada</th><th>Recurrente</th><th></th></tr></thead><tbody>`;
+    for (const c of reporte.contactos_detalle) {
+      const bienvenida = c.bienvenida_enviada === undefined ? '—' : (c.bienvenida_enviada ? '✅' : '🔴 No');
+      html += `<tr data-producto="${(c.producto_interes || '').replace(/"/g,'&quot;')}"><td>${c.contact_id}</td><td>${c.producto_interes || '-'}</td><td>${catLabel[c.categoria] || c.categoria}</td><td>${c.interacciones}</td><td>${bienvenida}</td><td>${c.recurrente ? 'Sí' : 'No'}</td><td><a class="link" href="${c.link_panel}" target="_blank" rel="noopener noreferrer">ver chat →</a></td></tr>`;
+    }
+    html += `</tbody></table></details></div>`;
+  }
+
+  html += renderDiagnostico(reporte.diagnostico);
+  html += renderDiagnosticoCualitativo(reporte, qualitative);
+  html += renderReconciliacion(reporte, qualitative);
+  html += renderPedidosLucidSales(reporte, qualitative);
+
+  html += `<div class="card" style="text-align:center">
+    <button id="download-bottom">⬇ Descargar informe Word (incluye este diagnóstico)</button>
+  </div>`;
+
+  $('results').innerHTML = html;
+  const btn = $('download-bottom');
+  if (btn) btn.addEventListener('click', () => $('download').click());
+}
+
+function applyProductFilter(producto) {
+  const els = document.querySelectorAll('[data-producto]');
+  for (const el of els) {
+    if (!producto || el.getAttribute('data-producto') === producto) {
+      el.style.display = '';
+    } else {
+      el.style.display = 'none';
+    }
+  }
+}
+
+function signalHtml(s) {
+  return `<div class="signal ${s.nivel}">${s.texto}<span class="rec">→ ${s.recomendacion}</span></div>`;
+}
+
+function renderConversaciones(conv, hasShopify) {
+  if (!conv) return '';
+  const productos = Object.entries(conv.por_producto)
+    .filter(([k]) => k !== '(sin producto identificado)')
+    .sort((a, b) => (b[1].chats + b[1].shopify) - (a[1].chats + a[1].shopify));
+  let html = `<div class="card"><h2>💬 Conversaciones (chats reales)${hasShopify ? ' vs. Shopify' : ''}</h2>
+    <div class="kpis" style="margin-bottom:12px;">
+      <div class="kpi" style="border-color:var(--green);"><div class="num" style="color:var(--green);">${conv.total_chats}</div><div class="label">Total de chats reales (WhatsApp)</div></div>
+      ${hasShopify ? `<div class="kpi"><div class="num">${conv.total_shopify}</div><div class="label">Total vía Shopify/API (sin chat)</div></div>` : ''}
+      <div class="kpi"><div class="num">${conv.total}</div><div class="label">Total contactos del rango</div></div>
+    </div>
+    <table><thead><tr><th>Producto</th><th>💬 Chats reales</th>${hasShopify ? '<th>🛒 Shopify/API</th>' : ''}<th>Total</th></tr></thead><tbody>`;
+  for (const [nombre, d] of productos) {
+    html += `<tr data-producto="${nombre.replace(/"/g,'&quot;')}"><td>${nombre}</td><td style="color:var(--green);font-weight:600;">${d.chats}</td>${hasShopify ? `<td>${d.shopify}</td>` : ''}<td>${d.chats + d.shopify}</td></tr>`;
+  }
+  html += `</tbody></table>
+    <p class="hint">${conv.nota}</p>
+  </div>`;
+  return html;
+}
+
+function renderEmbudoPorProducto(porProducto) {
+  const productos = Object.entries(porProducto)
+    .filter(([k]) => k !== '(sin producto identificado)')
+    .sort((a, b) => b[1].total_contactos - a[1].total_contactos);
+  if (!productos.length) return '';
+
+  const etapas = [
+    ['sin_intencion', 'Sin intención (Frío/Spam)'],
+    ['intencion_sin_datos', 'Intención sin datos'],
+    ['sin_confirmar', 'Datos sin confirmar'],
+    ['errores', 'Confirmada no subida'],
+    ['ventas', 'Venta verificada'],
+  ];
+
+  let html = `<div class="card"><h2>Embudo por producto</h2>
+    <p class="hint">Incluye la etapa "Sin intención" real por producto — Lucid Bot guarda el producto de interés desde que el contacto entra por el anuncio (campo "Producto Interesado _ Ad ID"), no solo cuando muestra intención.</p>`;
+
+  for (const [nombre, d] of productos) {
+    const base = d.total_contactos;
+    if (base === 0) continue;
+    const maxV = Math.max(d.sin_intencion, d.intencion_sin_datos, d.sin_confirmar, d.errores, d.ventas, 1);
+    html += `<div data-producto="${nombre.replace(/"/g,'&quot;')}" style="margin-bottom:16px;"><b style="font-size:13px;">${nombre}</b> <span class="hint" style="display:inline;">(${base} contactos, ${d.conversion_pct}% conversión)</span>`;
+    for (const [key, label] of etapas) {
+      const val = d[key] || 0;
+      if (val === 0 && key !== 'ventas') continue;
+      const w = (100 * val) / maxV;
+      html += `<div class="funnel-row" style="margin-top:4px;">
+        <div class="funnel-label" style="width:170px;font-size:12px;">${label}</div>
+        <div class="funnel-bar-track"><div class="funnel-bar" style="width:${w}%"></div></div>
+        <div class="funnel-pct">${val} (${pct(val, base)})</div>
+      </div>`;
+    }
+    html += `</div>`;
+  }
+  html += `</div>`;
+  return html;
+}
+
+function renderMensajeInicialPorProducto(mi) {
+  if (!mi || !mi.por_producto) return '';
+  const productos = Object.entries(mi.por_producto)
+    .filter(([k]) => k !== '(sin producto identificado)')
+    .sort((a, b) => (b[1].mismatches?.length || 0) - (a[1].mismatches?.length || 0) || (b[1].no_enviados - a[1].no_enviados));
+  if (!productos.length) return '';
+
+  let html = `<div class="card"><h2>✉️ Evaluación del mensaje inicial por producto</h2>
+    <p class="hint">${mi.nota}</p>
+    <table><thead><tr><th>Producto</th><th>✅ Bienvenida enviada</th><th>🔴 No enviada</th><th>⚪ No verificable</th><th>🔀 Mismatches detectados</th></tr></thead><tbody>`;
+  for (const [nombre, d] of productos) {
+    const totalVerificado = d.enviados + d.no_enviados;
+    const pctNoEnviada = totalVerificado ? +(100 * d.no_enviados / totalVerificado).toFixed(1) : 0;
+    html += `<tr data-producto="${nombre.replace(/"/g,'&quot;')}"><td>${nombre}</td><td>${d.enviados}</td><td${d.no_enviados > 0 ? ' style="color:var(--red);font-weight:600;"' : ''}>${d.no_enviados}${totalVerificado ? ` (${pctNoEnviada}%)` : ''}</td><td>${d.no_verificable}</td><td${d.mismatches.length > 0 ? ' style="color:var(--red);font-weight:600;"' : ''}>${d.mismatches.length}</td></tr>`;
+  }
+  html += `</tbody></table>`;
+
+  const conMismatches = productos.filter(([, d]) => d.mismatches.length > 0);
+  if (conMismatches.length) {
+    html += `<div style="margin-top:14px;"><b>🔀 Detalle de mismatches — el bot envió contenido de OTRO producto:</b>`;
+    for (const [nombre, d] of conMismatches) {
+      html += `<div data-producto="${nombre.replace(/"/g,'&quot;')}" style="margin-top:10px;background:#FEF3C7;border-radius:8px;padding:10px 14px;">
+        <b>${nombre}</b> — ${d.mismatches.length} caso(s)`;
+      for (const m of d.mismatches) {
+        html += `<div style="margin-top:6px;font-size:13px;">
+          <b>${m.contact_id}</b>: esperaba "${m.producto_esperado}", el mensaje real menciona "<b>${m.producto_mencionado}</b>" —
+          <a class="link" href="${m.link_panel}" target="_blank" rel="noopener noreferrer">ver chat →</a>
+          <div class="hint" style="margin-top:2px;">"${m.muestra.replace(/</g,'&lt;')}${m.muestra.length >= 220 ? '…' : ''}"</div>
+        </div>`;
+      }
+      html += `</div>`;
+    }
+    html += `</div>`;
+  }
+  html += `</div>`;
+  return html;
+}
+
+function renderDiagnostico(diag) {
+  if (!diag) return '';
+  let html = `<div class="diag-section">
+    <h2>🩺 Diagnóstico y recomendaciones</h2>
+    <p class="sub">${diag.nota_metodologica}</p>`;
+
+  html += `<div class="temp-row">`;
+  for (const [label, val] of Object.entries(diag.temperaturas)) {
+    html += `<div class="temp-chip"><div class="num">${val}</div><div class="label">${label}</div></div>`;
+  }
+  html += `</div>`;
+
+  const mi = diag.mensaje_inicial;
+  if (mi && mi.nivel !== 'sin_datos') {
+    html += `<div class="diag-global nivel-${mi.nivel}">
+      <b>Mensaje inicial (global, todos los productos)</b><br>
+      ${mi.texto}
+      ${mi.recomendacion ? `<div class="rec" style="margin-top:6px;font-style:italic;">→ ${mi.recomendacion}</div>` : ''}
+    </div>`;
+  }
+
+  const veredictoLabel = {
+    entrega_fallida: '🟠 Etiqueta "Bienvenida Enviada" ausente — señal POCO CONFIABLE, verificar chats reales antes de concluir falla de entrega',
+    mensaje_inicial: '🔴 Causa probable: MENSAJE INICIAL (no muestran intención)',
+    bot: '🔴 Causa probable: REGLAS DEL BOT (cierre)',
+    mixto: '🔴 Causa probable: MÁS DE UN PROBLEMA a la vez',
+    embudo: '🟡 Causa probable: forma de comunicar precio/oferta',
+    tecnico: '🟠 Causa: error técnico de subida',
+    sin_problema: '✅ Sin problemas detectados',
+    muestra_insuficiente: '⚪ Muestra insuficiente',
+  };
+  const veredictoNivel = { entrega_fallida: 'alto', mensaje_inicial: 'alto', bot: 'alto', mixto: 'alto', embudo: 'medio', tecnico: 'alto', sin_problema: 'ok', muestra_insuficiente: 'ok' };
+
+  html += `<h3 style="font-size:14px;color:var(--text);margin:16px 0 8px;">Por producto — qué funciona, qué no, y por qué</h3>`;
+  for (const p of diag.por_producto) {
+    html += `<div class="diag-card" data-producto="${p.producto.replace(/"/g,'&quot;')}">
+      <div class="diag-card-head">
+        <span class="prod-name">${p.producto}</span>
+        <span class="prod-stats">${p.muestra_contactos} contactos · ${p.ventas} ventas · ${p.conversion_pct}% conversión</span>
+      </div>
+      <div class="diag-global nivel-${veredictoNivel[p.veredicto.tipo]}" style="margin:8px 0;">
+        <b>${veredictoLabel[p.veredicto.tipo]}</b><br>
+        ${p.veredicto.texto}
+        ${p.veredicto.recomendacion ? `<div class="rec" style="margin-top:6px;font-style:italic;">→ ${p.veredicto.recomendacion}</div>` : ''}
+      </div>
+      ${p.positivas.length ? `<div class="no-signal">✅ ${p.positivas.join(' · ')}</div>` : ''}
+      ${p.senales.map(signalHtml).join('')}
+    </div>`;
+  }
+
+  html += `<p class="hint" style="margin-top:14px;">Estas señales y veredictos son hipótesis estadísticas basadas en las etapas del embudo por producto — para confirmar la causa exacta (redacción, precio, regla puntual del bot) usa "📋 Pedir análisis cualitativo".</p>`;
+  html += `</div>`;
+  return html;
+}
+
+const CAUSA_LABEL = {
+  mensaje_inicial_contenido: '📩 Contenido del mensaje inicial',
+  objecion_precio: '💰 Objeción de precio',
+  bot_error_contexto: '⚠️ Bot da info incorrecta',
+  bot_alucina: '🌀 Bot alucina/inventa info',
+  bot_incoherente: '❓ Bot responde incoherente',
+  bot_abandona_conversacion: '🚪 Bot abandona la conversación',
+  leads_baja_calidad: '🎯 Leads de baja calidad (audiencia)',
+  sin_causa_clara: '⚪ Sin causa clara',
+};
+const CONFIANZA_COLOR = { baja: 'var(--red)', media: '#D97706', alta: 'var(--green)' };
+
+function renderDiagnosticoCualitativo(reporte, qualitative) {
+  const muestra = reporte.muestra_cualitativa;
+  if (!muestra || !muestra.por_producto || !Object.keys(muestra.por_producto).length) return '';
+  const verificado = qualitative?.diagnostico_cualitativo?.por_producto;
+
+  let html = `<div class="card"><h2>🔍 Diagnóstico cualitativo por producto (rúbrica de causa raíz)</h2>
+    <p class="empty">${muestra.metodologia}</p>`;
+
+  if (!verificado) {
+    html += `<table><thead><tr><th>Producto</th><th>Casos disponibles para leer</th><th>Muestra a leer</th><th>% muestreado</th><th>Confianza esperada</th></tr></thead><tbody>`;
+    for (const [nombre, d] of Object.entries(muestra.por_producto).sort((a, b) => b[1].pool_total - a[1].pool_total)) {
+      html += `<tr data-producto="${nombre.replace(/"/g,'&quot;')}"><td>${nombre}</td><td>${d.pool_total}</td><td>${d.muestra_n}</td><td>${d.muestra_pct}%</td><td style="color:${CONFIANZA_COLOR[d.confianza]};font-weight:600;">${d.confianza}</td></tr>`;
+    }
+    html += `</tbody></table>
+      <p class="hint">⚪ Todavía no se ha leído esta muestra — usa "📋 Pedir análisis cualitativo" para que se lean estos chats reales y esta tabla se complete con la causa raíz verificada por producto.</p>
+    </div>`;
+    return html;
+  }
+
+  for (const [nombre, d] of Object.entries(verificado)) {
+    const causaTop = CAUSA_LABEL[d.causa_dominante] || d.causa_dominante;
+    html += `<div data-producto="${nombre.replace(/"/g,'&quot;')}" style="margin-bottom:16px;border:1px solid var(--border,#E5E7EB);border-radius:10px;padding:12px 14px;">
+      <b style="font-size:14px;">${nombre}</b>
+      <span class="hint" style="display:inline;"> — muestra: ${d.muestra_n} de ${d.pool_total} (${d.pool_total ? (100*d.muestra_n/d.pool_total).toFixed(1) : 0}%), confianza <span style="color:${CONFIANZA_COLOR[d.confianza]};font-weight:600;">${d.confianza}</span></span>
+      <div style="margin-top:6px;font-weight:600;">Causa dominante: ${causaTop}</div>
+      <div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:6px;">
+        ${Object.entries(d.causas || {}).filter(([,n]) => n > 0).map(([causa, n]) => `<span class="badge" style="background:#F3F4F6;">${CAUSA_LABEL[causa] || causa}: ${n}</span>`).join('')}
+      </div>`;
+    if (d.casos && d.casos.length) {
+      html += `<div style="margin-top:10px;">`;
+      for (const c of d.casos) {
+        html += `<div style="margin-top:6px;font-size:13px;padding:8px 10px;background:#FAFAFA;border-radius:6px;">
+          <b>${CAUSA_LABEL[c.causa] || c.causa}</b> — ${c.contact_id}
+          <a class="link" href="${c.link_panel}" target="_blank" rel="noopener noreferrer">ver chat →</a>
+          <div class="hint" style="margin-top:2px;">"${String(c.cita || '').replace(/</g,'&lt;')}"</div>
+        </div>`;
+      }
+      html += `</div>`;
+    }
+    html += `</div>`;
+  }
+  html += `</div>`;
+  return html;
+}
+
+function renderReconciliacion(reporte, qualitative) {
+  const metaPorProducto = qualitative?.mensajes_lucid_sales?.por_producto;
+  let html = `<div class="card"><h2>🔄 Reconciliación Meta ↔ Lucid Bot</h2>`;
+
+  html += `<p class="empty">Lucid Sales se basa en las métricas de Meta Ads (mensajes de anuncio). Lucid Bot registra las conversaciones y mensajes reales del bot. Estos dos números casi nunca son iguales — la diferencia normal viene de contactos recurrentes (cuentan como "mensaje nuevo" en Meta cada vez que hacen clic en el anuncio otra vez, pero en Lucid Bot siguen siendo el mismo contacto) y de mensajes que Meta cuenta como "conversación iniciada" sin que el bot llegue a registrar interacción real.</p>`;
+
+  if (!metaPorProducto || !metaPorProducto.length) {
+    html += `<p class="empty">Todavía no hay mensajes de Meta (Lucid Sales) por producto para este rango — usa "📋 Pedir análisis cualitativo" para traerlos (parte 3 de la solicitud) y esta tabla se completa sola la próxima vez que abras este informe.</p></div>`;
+    return html;
+  }
+
+  const metaMap = new Map(metaPorProducto.map(m => [m.producto, m.mensajes]));
+  const productos = Object.entries(reporte.por_producto).filter(([k]) => k !== '(sin producto identificado)');
+  const nombres = new Set([...productos.map(([k]) => k), ...metaMap.keys()]);
+
+  html += `<table><thead><tr><th>Producto</th><th>Mensajes Meta (Lucid Sales)</th><th>Mensajes Lucid Bot (aprox. ⚠)</th><th>Contactos recurrentes (Lucid Bot)</th><th>Diferencia</th></tr></thead><tbody>`;
+  for (const nombre of nombres) {
+    const lb = reporte.por_producto[nombre];
+    const metaMsg = metaMap.get(nombre);
+    const lbMsg = lb ? lb.mensajes : null;
+    const dif = (metaMsg != null && lbMsg != null) ? metaMsg - lbMsg : null;
+    html += `<tr>
+      <td>${nombre}</td>
+      <td>${metaMsg != null ? metaMsg : '—'}</td>
+      <td>${lbMsg != null ? lbMsg : '—'}</td>
+      <td>${lb ? (lb.contactos_recurrentes || 0) : '—'}</td>
+      <td>${dif != null ? (dif >= 0 ? '+' : '') + dif : '—'}</td>
+    </tr>`;
+  }
+  html += `</tbody></table>
+    <p class="hint">"Diferencia" = mensajes Meta − mensajes Lucid Bot. Un número alto y positivo puede señalar contactos que hicieron clic pero nunca llegaron a interactuar de verdad con el bot, o recurrentes contados de nuevo por Meta. Fuente Meta: ${qualitative.mensajes_lucid_sales.fuente || 'Lucid Sales'}. ⚠ El lado "Lucid Bot" es el campo "Interacciones" (acumulado de por vida del contacto) — ni la API ni Analíticas de Lucid Bot exponen mensajes reales por producto y fecha, así que esta columna es una aproximación, no una cifra verificada.</p>
+  </div>`;
+  return html;
+}
+
+function renderPedidosLucidSales(reporte, qualitative) {
+  const pedidos = qualitative?.pedidos_lucid_sales?.por_producto;
+  let html = `<div class="card"><h2>✅ Confirmación real de pedidos (Lucid Sales)</h2>`;
+  html += `<p class="empty">"Pedidos totales" de Lucid Sales es la fuente MÁS CONFIABLE del producto realmente vendido (viene del pedido real, no de la etiqueta del anuncio). "Confirmado / Por confirmar / Cancelado" es un estado POSTERIOR a que Lucid Bot marque "Pedidos Subidos" — una venta_verificada de Lucid Bot puede seguir "Por confirmar" en Lucid Sales.</p>`;
+
+  if (!pedidos || !pedidos.length) {
+    html += `<p class="empty">Todavía no hay datos de confirmación real por producto — usa "📋 Pedir análisis cualitativo" para traerlos (parte 4 de la solicitud).</p></div>`;
+    return html;
+  }
+
+  html += `<table><thead><tr><th>Producto</th><th>Pedidos (Lucid Sales)</th><th>Confirmado</th><th>Por confirmar</th><th>Cancelado</th><th>Ventas (Lucid Bot)</th><th>Diferencia</th></tr></thead><tbody>`;
+  for (const p of pedidos) {
+    const lb = reporte.por_producto[p.producto];
+    const lbVentas = lb ? lb.ventas : null;
+    const dif = lbVentas != null ? p.pedidos_totales - lbVentas : null;
+    const difStyle = dif && dif !== 0 ? ' style="color:var(--red);font-weight:600;"' : '';
+    html += `<tr>
+      <td>${p.producto}</td>
+      <td>${p.pedidos_totales}</td>
+      <td>${p.confirmado}</td>
+      <td>${p.por_confirmar}</td>
+      <td>${p.cancelado}</td>
+      <td>${lbVentas != null ? lbVentas : '—'}</td>
+      <td${difStyle}>${dif != null ? (dif >= 0 ? '+' : '') + dif : '—'}</td>
+    </tr>`;
+  }
+  html += `</tbody></table>
+    <p class="hint">"Diferencia" = pedidos reales en Lucid Sales − ventas que Lucid Bot atribuyó a ese producto. Distinto de cero suele indicar que un bug de plantilla/atribución mezcló productos — revisa el producto relacionado más probable.</p>
+  </div>`;
+  return html;
+}
+
+$('run').addEventListener('click', async () => {
+  const accountId = $('account').value;
+  const fromDate = $('from').value;
+  const toDate = $('to').value || fromDate;
+  const fromTime = $('from-time').value || '00:00';
+  const toTime = $('to-time').value || '23:59';
+  if (!accountId || !fromDate) { $('status').textContent = 'Selecciona tienda y fecha.'; return; }
+  const from = `${fromDate} ${fromTime}`;
+  const to = `${toDate} ${toTime}`;
+  $('run').disabled = true;
+  $('download').disabled = true;
+  $('status').textContent = 'Ejecutando auditoría (puede tardar 1-2 minutos)...';
+  $('results').innerHTML = '';
+  try {
+    const res = await fetch('/api/audit', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accountId, from, to }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Error desconocido');
+    render(data.reporte, data.accountName, data.qualitative);
+    // Usa la fecha con la que el backend REALMENTE guardó el archivo (data.fecha_guardado), no
+    // la fecha cruda del formulario — para rangos de varios días o "hasta ahora" no coinciden
+    // (ver computeDateSlug en dashboard-server.js), y usar la cruda apuntaría al archivo/slug
+    // equivocado al pedir el Word o el análisis cualitativo justo después de correrla.
+    currentAccountId = accountId; currentFrom = data.fecha_guardado || from;
+    currentAccountName = data.accountName;
+    $('download').disabled = false;
+    $('request-qual').disabled = false;
+    $('qual-copied').style.display = 'none';
+    $('status').textContent = 'Listo.';
+    loadHistory(accountId);
+  } catch (err) {
+    $('status').textContent = 'Error: ' + err.message;
+  } finally {
+    $('run').disabled = false;
+  }
+});
+
+$('download').addEventListener('click', () => {
+  if (!currentAccountId || !currentFrom) return;
+  window.location.href = `/api/report?accountId=${encodeURIComponent(currentAccountId)}&from=${encodeURIComponent(currentFrom)}`;
+});
+
+$('request-qual').addEventListener('click', async () => {
+  if (!currentAccountId || !currentFrom) return;
+  const res = await fetch('/api/qualitative-request', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ accountId: currentAccountId, from: currentFrom, accountName: currentAccountName }),
+  });
+  const data = await res.json();
+  try { await navigator.clipboard.writeText(data.prompt); } catch (e) { /* clipboard puede fallar sin HTTPS/foco; el texto igual queda guardado y visible abajo */ }
+  const box = $('qual-copied');
+  box.style.display = 'block';
+  box.innerHTML = `<b>✅ Solicitud guardada en ${data.savedTo} y copiada al portapapeles.</b>Pégala en cualquier chat de Claude Code para que arranque el análisis:\n\n${data.prompt}`;
+});
+
+(async function init() {
+  await loadAccounts();
+  $('from').value = todayStr();
+  $('from-time').value = '00:00';
+  $('to').value = todayStr();
+  $('to-time').value = nowTimeStr();
+  if ($('account').value) await loadHistory($('account').value);
+})();
+</script>
+</body>
+</html>

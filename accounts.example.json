@@ -1,0 +1,8 @@
+{
+  "TU_ACCOUNT_ID_AQUI": {
+    "name": "Nombre visible de la tienda",
+    "slug": "NombreCorto",
+    "token": "TU_ACCOUNT_ID_AQUI.tu_token_de_api_aqui",
+    "lucidSalesStoreName": "Nombre exacto como aparece en el switcher de Lucid Sales"
+  }
+}
