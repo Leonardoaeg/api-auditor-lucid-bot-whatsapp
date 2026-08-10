@@ -6,6 +6,7 @@ const {
   getContactTags,
   bogotaToUTC,
   apiTimestampToUTC,
+  utcToBogotaString,
 } = require("./lib.js");
 const { buildDiagnostico } = require("./diagnostic-rules.js");
 
@@ -81,8 +82,10 @@ function inRange(apiDateStr, fromDate, toDate) {
 // "mismo día" entre creación y confirmación sin líos de huso horario.
 function bogotaDateOnly(apiDateStr) {
   const utc = apiTimestampToUTC(apiDateStr);
-  const bogota = new Date(utc.getTime() - 5 * 3600 * 1000);
-  return bogota.toISOString().slice(0, 10);
+  // Offset de Bogotá centralizado en lib.js (utcToBogotaString) — antes se repetía el literal
+  // "5 * 3600 * 1000" acá y en daily-audit-all.js, con riesgo de que un cambio futuro al offset
+  // se aplicara en un lugar y se olvidara en el otro.
+  return utcToBogotaString(utc).slice(0, 10);
 }
 
 // De un pipeline de pedidos: oportunidades que llegaron a etapa de VENTA dentro del rango
@@ -104,17 +107,22 @@ function ventasConfirmadasEnOtraFecha(allList, yaIncluidos, fromDate, toDate) {
 // de la API (100 req/60s), ahora mitigado por el rate limiter de lib.js. Si aun así falla
 // tras el reintento, se cuenta como fallo real (no un "campo vacío") para poder avisarlo.
 async function getCustomFieldsWithRetry(accountId, contactId) {
-  let lastFailed = false;
+  // Un array vacío en el primer intento es una respuesta VÁLIDA (contacto sin custom fields
+  // todavía) — antes se seguía reintentando igual, y si el segundo intento fallaba por red,
+  // el resultado ya-exitoso del primero se descartaba y se reportaba como fallo real.
+  let lastGood = null;
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
       const cf = await getContactCustomFields(accountId, contactId);
-      lastFailed = false;
-      if (Array.isArray(cf) && cf.length > 0) return { ok: true, cf };
+      if (Array.isArray(cf)) {
+        if (cf.length > 0) return { ok: true, cf };
+        lastGood = cf;
+      }
     } catch (e) {
-      lastFailed = true;
+      // se reintenta abajo; si ya hay un `lastGood` de un intento anterior, se conserva.
     }
   }
-  return { ok: !lastFailed, cf: [] };
+  return lastGood !== null ? { ok: true, cf: lastGood } : { ok: false, cf: [] };
 }
 
 // La etiqueta "Bienvenida Enviada" (confirmada por el usuario 2026-07-26) marca que el bot
@@ -195,21 +203,25 @@ async function runAudit(accountId, from, to, { onProgress } = {}) {
       const stageKey = o.stage.name.trim().toLowerCase();
       const categoria = STAGE_TO_CATEGORY[stageKey] || "revision_manual";
       const prioridad = { venta_verificada: 5, confirmada_no_subida: 4, datos_sin_confirmar: 3, revision_manual: 2, intencion_sin_datos: 1, sin_intencion: 0 };
+      // c.pedido debe ir DENTRO del guard de prioridad — antes se sobreescribía sin condición
+      // en cada oportunidad, así que un contacto con dos oportunidades en el rango (ej. una en
+      // "Pedidos Subidos" y otra en "error al subir") podía quedar con c.categoria de la
+      // oportunidad ganadora pero c.pedido (valor/resumen/fecha) de la otra, distinta.
       if (!c.categoria || prioridad[categoria] > prioridad[c.categoria]) {
         c.categoria = categoria;
         c.origen_categoria = `Pedidos - ${pipelineName === "chat" ? "Chat" : "Landing"}: ${o.stage.name}`;
+        c.pedido = {
+          pipeline: pipelineName === "chat" ? "Pedidos - Chat" : "Pedidos - Landing",
+          stage: o.stage.name,
+          opportunity_id: o.id,
+          value: o.value,
+          created_at: o.created_at,
+          updated_at: o.updated_at,
+          resumen: o.title,
+          venta_de_otra_fecha: otraFecha,
+          mismo_dia: bogotaDateOnly(o.created_at) === bogotaDateOnly(o.updated_at),
+        };
       }
-      c.pedido = {
-        pipeline: pipelineName === "chat" ? "Pedidos - Chat" : "Pedidos - Landing",
-        stage: o.stage.name,
-        opportunity_id: o.id,
-        value: o.value,
-        created_at: o.created_at,
-        updated_at: o.updated_at,
-        resumen: o.title,
-        venta_de_otra_fecha: otraFecha,
-        mismo_dia: bogotaDateOnly(o.created_at) === bogotaDateOnly(o.updated_at),
-      };
     }
   }
 
@@ -251,6 +263,11 @@ async function runAudit(accountId, from, to, { onProgress } = {}) {
     log(`⚠️ ${msg}`);
   }
 
+  // Cacheado una sola vez por contacto: productoDe() es puro (depende solo de producto_interes
+  // y pedido.resumen, ambos ya resueltos acá) pero antes se recalculaba desde cero (regex sobre
+  // el resumen) en 3+ loops separados sobre el mismo array de contactos más abajo.
+  for (const c of contactos) c.producto = productoDe(c);
+
   const sinIntencionContactos = contactos.filter((c) => c.categoria === "sin_intencion");
   if (sinIntencionContactos.length) {
     log(`Verificando etiqueta "Bienvenida Enviada" de ${sinIntencionContactos.length} contactos sin intención...`);
@@ -270,11 +287,17 @@ async function runAudit(accountId, from, to, { onProgress } = {}) {
   let conteo = {};
   for (const c of contactos) conteo[c.categoria] = (conteo[c.categoria] || 0) + 1;
 
-  let ventas = contactos.filter((c) => c.categoria === "venta_verificada" && c.pedido);
+  // Sin "&& c.pedido": "cliente ya cargado a dropi" también mapea a venta_verificada (línea 47)
+  // sin pasar por Pedidos-Chat/Landing, así que exigir c.pedido aquí dejaba a esos contactos
+  // fuera de `ventas` mientras `conteo`/`embudo`/`porProducto[x].ventas` (que cuentan por
+  // categoria solamente) sí los incluían — dos totales de venta distintos en el mismo reporte.
+  // El resto del código ya usa `c.pedido?.` en todos lados, así que una venta sin pedido
+  // simplemente no aporta valor/resumen (no hay de dónde sacarlos), pero sí cuenta.
+  let ventas = contactos.filter((c) => c.categoria === "venta_verificada");
   const errores = contactos.filter((c) => c.categoria === "confirmada_no_subida");
   const sinConfirmar = contactos.filter((c) => c.categoria === "datos_sin_confirmar");
   const calientesTibios = contactos.filter((c) => c.categoria === "intencion_sin_datos");
-  const dropi = contactos.filter((c) => c.dropi);
+  let dropi = contactos.filter((c) => c.dropi);
 
   // Verificación cruzada con las etiquetas REALES de Lucid Sales (catálogo confirmado
   // 2026-07-27): "Pedido subido LucidSales" confirma una subida genuina; "Fallo al subir
@@ -333,7 +356,11 @@ async function runAudit(accountId, from, to, { onProgress } = {}) {
     contactos = contactos.filter((c) => !idsExcluir.has(c.contact_id));
     conteo = {};
     for (const c of contactos) conteo[c.categoria] = (conteo[c.categoria] || 0) + 1;
-    ventas = contactos.filter((c) => c.categoria === "venta_verificada" && c.pedido);
+    ventas = contactos.filter((c) => c.categoria === "venta_verificada");
+    // `dropi` se computó ANTES de este filtro (línea de arriba) — sin recalcularlo acá, un
+    // contacto recién excluido de total_contactos podía seguir apareciendo en dropi.detalle,
+    // contradiciendo la nota de que los excluidos "no suman a ningún conteo del reporte".
+    dropi = contactos.filter((c) => c.dropi);
     // Nota: NO se agrega a `warnings` — esto es un ajuste correcto y esperado, no una falla ni
     // un dato incompleto (ese arreglo dispara el banner rojo "vuelve a correr la auditoría",
     // que sería engañoso aquí). El detalle completo queda en `devoluciones_excluidas` abajo.
@@ -409,7 +436,10 @@ async function runAudit(accountId, from, to, { onProgress } = {}) {
 
   function productoDe(c) {
     if (c.producto_interes) return c.producto_interes.trim();
-    if (c.pedido) {
+    // Guard alineado con productoRealDePedido() de abajo: un pedido con título nulo/vacío
+    // (ej. una oportunidad creada manualmente sin llenar) tiraba TypeError acá y tumbaba toda
+    // la auditoría — productoRealDePedido() ya se protegía, esta (mucho más usada) no.
+    if (c.pedido && c.pedido.resumen) {
       const match = c.pedido.resumen.match(/\d+\s*x\s*([^—–-]+?)\s*(?:—|–|-)/);
       if (match) return match[1].trim();
     }
@@ -437,7 +467,7 @@ async function runAudit(accountId, from, to, { onProgress } = {}) {
 
   const porProducto = {};
   for (const c of contactos) {
-    const producto = productoDe(c);
+    const producto = c.producto;
     if (!porProducto[producto]) {
       porProducto[producto] = {
         total_contactos: 0, mensajes: 0, mensajes_verificados: 0, mensajes_no_verificados: 0, contactos_mensajes_verificados: 0,
@@ -485,7 +515,7 @@ async function runAudit(accountId, from, to, { onProgress } = {}) {
   let totalChats = 0;
   let totalShopify = 0;
   for (const c of contactos) {
-    const producto = productoDe(c);
+    const producto = c.producto;
     if (!conversacionesPorProducto[producto]) conversacionesPorProducto[producto] = { chats: 0, shopify: 0 };
     if (c.es_shopify) { conversacionesPorProducto[producto].shopify++; totalShopify++; }
     else { conversacionesPorProducto[producto].chats++; totalChats++; }
@@ -525,7 +555,7 @@ async function runAudit(accountId, from, to, { onProgress } = {}) {
   const UMBRAL_MENSAJE_ORIGINAL = 2;
   const mensajeInicialPorProducto = {};
   for (const c of contactos) {
-    const producto = productoDe(c);
+    const producto = c.producto;
     if (!mensajeInicialPorProducto[producto]) {
       mensajeInicialPorProducto[producto] = { enviados: 0, no_enviados: 0, no_verificable: 0, mismatches: [] };
     }
@@ -594,7 +624,7 @@ async function runAudit(accountId, from, to, { onProgress } = {}) {
       pedido: c.pedido ? {
         pipeline: c.pedido.pipeline,
         stage: c.pedido.stage,
-        resumen: c.pedido.resumen.slice(0, 150),
+        resumen: c.pedido.resumen ? c.pedido.resumen.slice(0, 150) : null,
         value: c.pedido.value,
         mismo_dia: c.pedido.mismo_dia,
         venta_de_otra_fecha: c.pedido.venta_de_otra_fecha,
@@ -659,10 +689,10 @@ async function runAudit(accountId, from, to, { onProgress } = {}) {
   const muestraCualitativaPorProducto = {};
   for (const [producto, d] of Object.entries(porProducto)) {
     if (producto === "(sin producto identificado)") continue;
-    const sinConfirmarProd = sinConfirmar.filter((c) => productoDe(c) === producto);
-    const tibiosProd = calientesTibios.filter((c) => productoDe(c) === producto);
+    const sinConfirmarProd = sinConfirmar.filter((c) => c.producto === producto);
+    const tibiosProd = calientesTibios.filter((c) => c.producto === producto);
     const sinIntencionConBienvenidaProd = contactos.filter(
-      (c) => c.categoria === "sin_intencion" && c.bienvenida_enviada === true && productoDe(c) === producto
+      (c) => c.categoria === "sin_intencion" && c.bienvenida_enviada === true && c.producto === producto
     );
     const muestraPrecioReglas = [...muestraSistematica(sinConfirmarProd, "Precio/objeción — tenía datos, no confirmó"), ...muestraSistematica(tibiosProd, "Precio/objeción — mostró interés, nunca dio datos")];
     const muestraMensajeInicial = muestraSistematica(sinIntencionConBienvenidaProd, "Contenido del mensaje inicial — recibió la bienvenida, no mostró interés");

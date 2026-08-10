@@ -5,6 +5,7 @@ const fs = require("fs");
 const path = require("path");
 const { runAudit } = require("./audit-core.js");
 const { buildDocxBuffer } = require("./report-generator.js");
+const { slugify } = require("./lib.js");
 
 const PORT = 4545;
 const ACCOUNTS_FILE = path.join(__dirname, "accounts.local.json");
@@ -17,10 +18,6 @@ function readAccounts() {
 function writeAccounts(accounts) {
   fs.writeFileSync(ACCOUNTS_FILE, JSON.stringify(accounts, null, 2));
 }
-function slugify(s) {
-  return String(s).trim().replace(/[^a-zA-Z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "Tienda";
-}
-
 function getAccountsPublic() {
   const accounts = readAccounts();
   return Object.entries(accounts).map(([id, a]) => ({

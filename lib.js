@@ -119,6 +119,14 @@ function utcToBogotaString(date) {
   return bogota.toISOString().replace("T", " ").slice(0, 19);
 }
 
+// Única fuente de la regla de "slug" de nombre de tienda — antes estaba copiada verbatim en
+// dashboard-server.js y en daily-audit-all.js; si se ajustaba en un lado y no en el otro, la
+// auditoría nocturna (cron) y la manual (dashboard) de la misma cuenta terminaban escribiendo
+// en carpetas distintas bajo Informes/auditorias/, partiendo en dos el historial de una tienda.
+function slugify(s) {
+  return String(s).trim().replace(/[^a-zA-Z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "Tienda";
+}
+
 module.exports = {
   getAccount,
   apiGet,
@@ -133,4 +141,5 @@ module.exports = {
   bogotaToUTC,
   apiTimestampToUTC,
   utcToBogotaString,
+  slugify,
 };

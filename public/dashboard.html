@@ -425,10 +425,10 @@ function render(reporte, accountName, qualitative) {
     ['Venta verificada', e.venta_verificada],
   ];
   const maxVal = Math.max(...funnelStages.map(s => s[1]), 1);
-  // Solo mostrar todo lo relacionado a canal API/Shopify si esta tienda realmente tiene
-  // actividad en el pipeline "Pedidos - Landing" (o etiqueta Shopify) en esta auditoría —
-  // si da 0, la tienda no usa esa integración y la columna/tarjeta es puro ruido.
-  const hasShopify = !!(reporte.canal_pedidos && reporte.canal_pedidos.api_shopify.contactos > 0);
+  // Antes esto se ocultaba por completo si la tienda daba 0 en Shopify — pedido explícito
+  // 2026-08-09: el canal debe verse SIEMPRE, explícito (aunque sea "0 Shopify / N WhatsApp"),
+  // para no dejarle al usuario la duda de si el número de ventas incluye o no Shopify.
+  const hasShopify = !!reporte.canal_pedidos;
 
   let html = '';
 
