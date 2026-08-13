@@ -260,8 +260,22 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === "/api/history" && req.method === "GET") {
       const accountId = url.searchParams.get("accountId");
       if (!accountId) return sendJson(res, 400, { error: "Falta accountId" });
+      // Filtro opcional por rango de fecha (día/mes/rango libre) — from/to son "YYYY-MM-DD",
+      // ambos inclusivos, comparados como texto contra el dateSlug del nombre de archivo (funciona
+      // porque el formato ISO ordena igual como string que como fecha). Sin from/to, se comporta
+      // igual que antes (todo el histórico). Pedido explícito 2026-08-13.
+      const fromFilter = url.searchParams.get("from");
+      const toFilter = url.searchParams.get("to");
       const dir = storeDir(accountId);
-      const files = fs.readdirSync(dir).filter((f) => /^\d+_\d{4}-\d{2}-\d{2}\.json$/.test(f));
+      let files = fs.readdirSync(dir).filter((f) => /^\d+_\d{4}-\d{2}-\d{2}\.json$/.test(f));
+      if (fromFilter || toFilter) {
+        files = files.filter((f) => {
+          const dateSlug = f.match(/_(\d{4}-\d{2}-\d{2})\.json$/)[1];
+          if (fromFilter && dateSlug < fromFilter) return false;
+          if (toFilter && dateSlug > toFilter) return false;
+          return true;
+        });
+      }
       const porProductoAcum = {};
       // Detalle día por día por producto — permite comparar el mismo producto entre distintas
       // fechas, en vez de solo ver el acumulado total. Pedido explícito 2026-07-30.

@@ -2,6 +2,12 @@
 
 Todas las novedades importantes de este proyecto se documentan aquí. Para actualizar, ver la sección "Actualizar a una versión nueva" del [README](README.md).
 
+## [1.6.0] — 2026-08-13
+
+Filtro de fechas para el histórico, estilo Meta Ads Manager.
+
+- **Nuevo: filtro de rango de fechas en "Cómo va la operación — histórico por tienda".** Botón "📅 Rango de fechas" que abre un popover con atajos (Hoy, Ayer, Últimos 7 días, Últimos 30 días, Este mes, Mes anterior, Todo el histórico) y un calendario navegable para elegir un rango libre haciendo clic en el día inicial y el final. El filtro es real de extremo a extremo: `GET /api/history` ahora acepta `from`/`to` y recalcula KPIs, tabla por producto y listado de auditorías solo con las auditorías del rango elegido — no es solo cosmético sobre la tabla. Sin dependencias externas (widget propio en vanilla JS).
+
 ## [1.5.0] — 2026-08-13
 
 Corrección definitiva de la paginación en cuentas grandes, auditorías asíncronas, y desglose de canal por pedido.

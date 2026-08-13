@@ -69,7 +69,8 @@ Desde el panel **"⚙️ Gestionar tiendas"** puedes agregar, editar o quitar ti
 
 ### 4. Historial y operación por tienda
 
-El panel **"📊 Cómo va la operación — histórico por tienda"** acumula TODAS las auditorías guardadas de una tienda (contactos, ventas, valor, conversión, por producto) sin volver a llamar la API. Incluye:
+El panel **"📊 Cómo va la operación — histórico por tienda"** acumula las auditorías guardadas de una tienda (contactos, ventas, valor, conversión, por producto) sin volver a llamar la API. Incluye:
+- **Filtro de rango de fechas** (botón "📅 Rango de fechas"): un popover con atajos (Hoy, Ayer, Últimos 7 días, Últimos 30 días, Este mes, Mes anterior, Todo el histórico) y un calendario navegable para elegir un rango libre — filtra tanto el listado de auditorías como los KPIs/tabla por producto, no solo la tabla.
 - Un selector para **comparar un producto entre auditorías guardadas** (ej. un mismo producto entre dos fechas) y ver su tendencia día por día.
 - El listado de auditorías individuales — verlas de nuevo no gasta cuota, se leen del disco.
 
@@ -85,6 +86,7 @@ Si quieres que el dashboard se mantenga corriendo solo (se reinicia automáticam
 El botón **"📋 Pedir análisis cualitativo"** genera un texto listo para pegarle a Claude Code, que entonces:
 - Lee los chats reales de los casos más importantes (ventas a confirmar, errores, datos sin confirmar).
 - Trae los mensajes reales de Meta Ads y los pedidos reales confirmados desde Lucid Sales (esto sí requiere que inicies sesión ahí manualmente — nunca se automatiza ni se guardan contraseñas).
+- Desglosa automáticamente los pedidos del rango auditado por canal (WhatsApp / Shopify / otros), a partir del listado real de pedidos de Lucid Sales.
 
 ## Usar con un agente de código
 

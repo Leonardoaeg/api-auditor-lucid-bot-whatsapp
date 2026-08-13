@@ -49,6 +49,47 @@
   button.secondary { background: white; color: var(--purple); border: 1px solid var(--purple); }
   button.secondary:hover { background: var(--purple-light); }
   button:disabled { opacity: 0.5; cursor: not-allowed; }
+  button.chip { padding: 6px 12px; font-size: 12px; font-weight: 600; }
+  button.chip.active-preset { background: var(--purple); color: white; border-color: var(--purple); }
+
+  /* Selector de rango de fecha estilo Meta Ads: botón que abre un popover con atajos +
+     calendario navegable. Pedido explícito 2026-08-13 ("que sea tipo meta"). */
+  .hf-popover {
+    position: absolute; top: calc(100% + 6px); left: 0; z-index: 50;
+    background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+    box-shadow: 0 12px 32px rgba(0,0,0,0.18); padding: 0; display: flex; min-width: 560px;
+    overflow: hidden;
+  }
+  .hf-presets {
+    display: flex; flex-direction: column; gap: 2px; padding: 10px; border-right: 1px solid var(--border);
+    min-width: 150px; background: #FAFAFB;
+  }
+  .hf-presets button {
+    background: none; color: var(--text); border: none; text-align: left; font-weight: 500;
+    font-size: 13px; padding: 8px 10px; border-radius: 6px; cursor: pointer;
+  }
+  .hf-presets button:hover { background: var(--purple-light); }
+  .hf-presets button.active-preset { background: var(--purple); color: white; font-weight: 600; }
+  .hf-cal-side { padding: 14px 16px; flex: 1; }
+  .hf-cal-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .hf-cal-nav button { background: none; border: none; color: var(--purple); font-size: 16px; cursor: pointer; padding: 2px 8px; border-radius: 6px; }
+  .hf-cal-nav button:hover { background: var(--purple-light); }
+  .hf-cal-nav span { font-size: 13px; font-weight: 700; text-transform: capitalize; }
+  .hf-cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+  .hf-cal-grid .hf-dow { font-size: 10px; color: var(--gray); text-align: center; font-weight: 700; padding-bottom: 4px; }
+  .hf-day { font-size: 12px; text-align: center; padding: 6px 0; border-radius: 6px; cursor: pointer; border: none; background: none; color: var(--text); }
+  .hf-day:hover { background: var(--purple-light); }
+  .hf-day.hf-empty { cursor: default; }
+  .hf-day.hf-empty:hover { background: none; }
+  .hf-day.hf-in-range { background: var(--purple-light); border-radius: 0; }
+  .hf-day.hf-range-start { background: var(--purple); color: white; border-radius: 6px 0 0 6px; }
+  .hf-day.hf-range-end { background: var(--purple); color: white; border-radius: 0 6px 6px 0; }
+  .hf-day.hf-range-single { background: var(--purple); color: white; border-radius: 6px; }
+  .hf-day.hf-today:not(.hf-range-start):not(.hf-range-end):not(.hf-range-single) { box-shadow: inset 0 0 0 1px var(--purple); }
+  .hf-cal-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; gap: 8px; }
+  .hf-cal-footer .hf-range-text { font-size: 12px; color: var(--gray); }
+  .hf-cal-footer .hf-actions { display: flex; gap: 6px; }
+  .hf-cal-footer button.secondary, .hf-cal-footer button:not(.secondary) { padding: 6px 14px; font-size: 12px; }
   #status { font-size: 13px; color: var(--gray); margin-left: 8px; }
   .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; margin-bottom: 24px; }
   .kpi { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
@@ -144,7 +185,14 @@
         <label>Mostrando datos de</label>
         <select id="history-account" onchange="onHistoryAccountChange(this.value)"></select>
       </div>
-      <p class="hint">Resumen de TODAS las auditorías ya guardadas de <b id="history-account-name">esta tienda</b> — no vuelve a llamar la API de Lucid Bot, así que no cuenta contra el límite de solicitudes.</p>
+      <p class="hint">Resumen de las auditorías ya guardadas de <b id="history-account-name">esta tienda</b> — no vuelve a llamar la API de Lucid Bot, así que no cuenta contra el límite de solicitudes.</p>
+      <div class="field" id="history-filter" style="margin-bottom:14px;position:relative;">
+        <label>Rango de fechas</label>
+        <button type="button" id="hf-trigger" class="secondary" style="min-width:260px;text-align:left;display:flex;align-items:center;gap:8px;" onclick="toggleHfPopover()">
+          <span>📅</span><span id="hf-trigger-label">Todo el histórico</span>
+        </button>
+        <div id="hf-popover" class="hf-popover" style="display:none;"></div>
+      </div>
       <div id="operacion-resumen"></div>
       <details style="margin-top:14px;">
         <summary style="cursor:pointer;font-weight:600;color:var(--purple);">Ver auditorías individuales</summary>
@@ -289,6 +337,171 @@ $('s-save').addEventListener('click', async () => {
 
 $('s-cancel').addEventListener('click', resetStoreForm);
 
+function toDateSlug(d) {
+  const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, '0'), day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+function fromDateSlug(slug) {
+  const [y, m, d] = slug.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+function fmtDateEs(slug) {
+  const d = fromDateSlug(slug);
+  return d.toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+// Selector de rango de fecha estilo Meta Ads Manager (popover con atajos + calendario
+// navegable, click en día inicial y día final). Pedido explícito 2026-08-13.
+// Estado aplicado (lo que usa loadHistory) vs. pendiente (mientras se interactúa en el popover,
+// antes de confirmar con "Aplicar" o un atajo).
+let hfAppliedFrom = null, hfAppliedTo = null; // null = "todo el histórico"
+let hfPendingFrom = null, hfPendingTo = null;
+let hfPickingSecond = false; // true tras elegir el primer día del rango manual
+let hfCalMonth = new Date(); // mes que muestra el calendario visible
+
+const HF_PRESETS = [
+  { key: 'hoy', label: 'Hoy' },
+  { key: 'ayer', label: 'Ayer' },
+  { key: '7d', label: 'Últimos 7 días' },
+  { key: '30d', label: 'Últimos 30 días' },
+  { key: 'mes', label: 'Este mes' },
+  { key: 'mes_pasado', label: 'Mes anterior' },
+  { key: 'todo', label: 'Todo el histórico' },
+];
+
+function hfPresetRange(preset) {
+  const today = new Date();
+  if (preset === 'hoy') return [toDateSlug(today), toDateSlug(today)];
+  if (preset === 'ayer') { const d = new Date(today); d.setDate(d.getDate() - 1); return [toDateSlug(d), toDateSlug(d)]; }
+  if (preset === '7d') { const d = new Date(today); d.setDate(d.getDate() - 6); return [toDateSlug(d), toDateSlug(today)]; }
+  if (preset === '30d') { const d = new Date(today); d.setDate(d.getDate() - 29); return [toDateSlug(d), toDateSlug(today)]; }
+  if (preset === 'mes') return [toDateSlug(new Date(today.getFullYear(), today.getMonth(), 1)), toDateSlug(today)];
+  if (preset === 'mes_pasado') return [toDateSlug(new Date(today.getFullYear(), today.getMonth() - 1, 1)), toDateSlug(new Date(today.getFullYear(), today.getMonth(), 0))];
+  return [null, null]; // 'todo'
+}
+
+function toggleHfPopover() {
+  const pop = $('hf-popover');
+  if (pop.style.display === 'none') openHfPopover(); else closeHfPopover();
+}
+function openHfPopover() {
+  hfPendingFrom = hfAppliedFrom; hfPendingTo = hfAppliedTo; hfPickingSecond = false;
+  hfCalMonth = hfPendingTo ? fromDateSlug(hfPendingTo) : new Date();
+  renderHfPopover();
+  $('hf-popover').style.display = 'flex';
+  document.addEventListener('click', hfOutsideClickHandler, { capture: true });
+}
+function closeHfPopover() {
+  $('hf-popover').style.display = 'none';
+  document.removeEventListener('click', hfOutsideClickHandler, { capture: true });
+}
+function hfOutsideClickHandler(e) {
+  if (!$('history-filter').contains(e.target)) closeHfPopover();
+}
+
+function hfActivePresetKey() {
+  for (const p of HF_PRESETS) {
+    const [f, t] = hfPresetRange(p.key);
+    if (f === hfPendingFrom && t === hfPendingTo) return p.key;
+  }
+  return null;
+}
+
+function renderHfPopover() {
+  const activeKey = hfActivePresetKey();
+  const presetsHtml = HF_PRESETS.map((p) =>
+    `<button type="button" class="${activeKey === p.key ? 'active-preset' : ''}" onclick="applyHfPreset('${p.key}')">${p.label}</button>`
+  ).join('');
+
+  const monthLabel = hfCalMonth.toLocaleDateString('es-CO', { month: 'long', year: 'numeric' });
+  const y = hfCalMonth.getFullYear(), m = hfCalMonth.getMonth();
+  const firstDow = new Date(y, m, 1).getDay(); // 0=domingo
+  const daysInMonth = new Date(y, m + 1, 0).getDate();
+  const todaySlug = toDateSlug(new Date());
+  const dows = ['D', 'L', 'M', 'X', 'J', 'V', 'S'];
+
+  let daysHtml = dows.map((d) => `<div class="hf-dow">${d}</div>`).join('');
+  for (let i = 0; i < firstDow; i++) daysHtml += `<button class="hf-day hf-empty" disabled></button>`;
+  for (let day = 1; day <= daysInMonth; day++) {
+    const slug = toDateSlug(new Date(y, m, day));
+    let cls = 'hf-day';
+    if (slug === todaySlug) cls += ' hf-today';
+    if (hfPendingFrom && hfPendingTo) {
+      if (hfPendingFrom === hfPendingTo && slug === hfPendingFrom) cls += ' hf-range-single';
+      else if (slug === hfPendingFrom) cls += ' hf-range-start';
+      else if (slug === hfPendingTo) cls += ' hf-range-end';
+      else if (slug > hfPendingFrom && slug < hfPendingTo) cls += ' hf-in-range';
+    } else if (hfPendingFrom && slug === hfPendingFrom) {
+      cls += ' hf-range-single';
+    }
+    daysHtml += `<button type="button" class="${cls}" onclick="pickHfDay('${slug}')">${day}</button>`;
+  }
+
+  const rangeText = hfPendingFrom
+    ? (hfPendingTo && hfPendingTo !== hfPendingFrom ? `${fmtDateEs(hfPendingFrom)} – ${fmtDateEs(hfPendingTo)}` : fmtDateEs(hfPendingFrom))
+    : 'Todo el histórico';
+
+  $('hf-popover').innerHTML = `
+    <div class="hf-presets">${presetsHtml}</div>
+    <div class="hf-cal-side">
+      <div class="hf-cal-nav">
+        <button type="button" onclick="hfShiftMonth(-1)">‹</button>
+        <span>${monthLabel}</span>
+        <button type="button" onclick="hfShiftMonth(1)">›</button>
+      </div>
+      <div class="hf-cal-grid">${daysHtml}</div>
+      <div class="hf-cal-footer">
+        <span class="hf-range-text">${rangeText}</span>
+        <div class="hf-actions">
+          <button type="button" class="secondary" onclick="closeHfPopover()">Cancelar</button>
+          <button type="button" onclick="applyHfPending()">Aplicar</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+function hfShiftMonth(delta) {
+  hfCalMonth = new Date(hfCalMonth.getFullYear(), hfCalMonth.getMonth() + delta, 1);
+  renderHfPopover();
+}
+
+function pickHfDay(slug) {
+  if (!hfPendingFrom || (hfPendingFrom && hfPendingTo && !hfPickingSecond)) {
+    // Empieza una selección nueva.
+    hfPendingFrom = slug; hfPendingTo = slug; hfPickingSecond = true;
+  } else {
+    // Segundo clic: cierra el rango (permite elegir el día final antes o después del inicial).
+    if (slug < hfPendingFrom) { hfPendingTo = hfPendingFrom; hfPendingFrom = slug; }
+    else { hfPendingTo = slug; }
+    hfPickingSecond = false;
+  }
+  renderHfPopover();
+}
+
+function applyHfPreset(key) {
+  const [from, to] = hfPresetRange(key);
+  hfAppliedFrom = from; hfAppliedTo = to;
+  closeHfPopover();
+  updateHfTriggerLabel();
+  const accountId = $('history-account').value;
+  if (accountId) loadHistory(accountId);
+}
+
+function applyHfPending() {
+  hfAppliedFrom = hfPendingFrom; hfAppliedTo = hfPendingTo || hfPendingFrom;
+  closeHfPopover();
+  updateHfTriggerLabel();
+  const accountId = $('history-account').value;
+  if (accountId) loadHistory(accountId);
+}
+
+function updateHfTriggerLabel() {
+  const label = hfAppliedFrom
+    ? (hfAppliedTo && hfAppliedTo !== hfAppliedFrom ? `${fmtDateEs(hfAppliedFrom)} – ${fmtDateEs(hfAppliedTo)}` : fmtDateEs(hfAppliedFrom))
+    : 'Todo el histórico';
+  $('hf-trigger-label').textContent = label;
+}
+
 async function loadHistory(accountId) {
   const tbody = document.querySelector('#history-table tbody');
   const resumenEl = $('operacion-resumen');
@@ -296,13 +509,21 @@ async function loadHistory(accountId) {
   if ($('history-account').value !== accountId) $('history-account').value = accountId;
   $('history-status').textContent = 'Cargando historial...';
   try {
-    const res = await fetch(`/api/history?accountId=${encodeURIComponent(accountId)}`);
+    const from = hfAppliedFrom || '';
+    const to = hfAppliedTo || '';
+    let url = `/api/history?accountId=${encodeURIComponent(accountId)}`;
+    if (from) url += `&from=${encodeURIComponent(from)}`;
+    if (to) url += `&to=${encodeURIComponent(to)}`;
+    const res = await fetch(url);
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Error desconocido');
     $('history-account-name').textContent = data.accountName || 'esta tienda';
+    const hayFiltro = !!(from || to);
     if (!data.items.length) {
-      tbody.innerHTML = `<tr><td colspan="7" class="empty">Sin auditorías guardadas todavía para esta tienda.</td></tr>`;
-      resumenEl.innerHTML = `<p class="empty">Corre tu primera auditoría abajo para empezar a ver el histórico de esta tienda.</p>`;
+      tbody.innerHTML = `<tr><td colspan="7" class="empty">${hayFiltro ? 'Sin auditorías guardadas en el rango de fechas elegido.' : 'Sin auditorías guardadas todavía para esta tienda.'}</td></tr>`;
+      resumenEl.innerHTML = hayFiltro
+        ? `<p class="empty">Prueba otro rango de fechas o el atajo "Todo".</p>`
+        : `<p class="empty">Corre tu primera auditoría abajo para empezar a ver el histórico de esta tienda.</p>`;
     } else {
       tbody.innerHTML = data.items.map(it => `
         <tr>
@@ -320,7 +541,8 @@ async function loadHistory(accountId) {
         </tr>`).join('');
       resumenEl.innerHTML = renderOperacionResumen(data.resumen, data.accountName);
     }
-    $('history-status').textContent = `${data.items.length} auditoría(s) guardada(s) para ${data.accountName}.`;
+    const rangoTxt = from || to ? ` — rango ${from || '(inicio)'} a ${to || '(hoy)'}` : '';
+    $('history-status').textContent = `${data.items.length} auditoría(s) guardada(s) para ${data.accountName}${rangoTxt}.`;
   } catch (err) {
     $('history-status').textContent = 'Error: ' + err.message;
   }
