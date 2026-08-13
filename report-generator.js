@@ -307,6 +307,15 @@ function buildDocx(reporte, meta = {}) {
           ),
         ] : []),
 
+        ...(reporte.posible_falta_fotos_sin_anuncio?.cantidad ? [
+          p(`📷 ${reporte.posible_falta_fotos_sin_anuncio.cantidad} caso(s) con marcador de fotos sin resolver: ${reporte.posible_falta_fotos_sin_anuncio.nota}`, { bold: true }),
+          table(
+            ["Contacto", "Producto", "Anuncio Facebook", "Marcador roto encontrado"],
+            reporte.posible_falta_fotos_sin_anuncio.detalle.map((c) => [c.contact_id, c.producto_interes || "-", c.anuncio_facebook || "(vacío)", c.marcador_roto || "-"]),
+            [1800, 2000, 1800, 2600]
+          ),
+        ] : []),
+
         ...(reporte.devoluciones_excluidas?.cantidad ? [
           p(`↩️ ${reporte.devoluciones_excluidas.cantidad} pedido(s) EXCLUIDO(S) del conteo por devolución: ${reporte.devoluciones_excluidas.nota}`, { bold: true }),
           table(

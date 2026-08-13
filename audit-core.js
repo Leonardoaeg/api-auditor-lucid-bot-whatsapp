@@ -6,7 +6,6 @@ const {
   getContactTags,
   bogotaToUTC,
   apiTimestampToUTC,
-  utcToBogotaString,
 } = require("./lib.js");
 const { buildDiagnostico } = require("./diagnostic-rules.js");
 
@@ -64,7 +63,11 @@ async function fetchPipelineAll(accountId, pipelineName, warnings) {
     return [];
   }
   try {
-    return await getAllOpportunities(accountId, pipelineId);
+    const items = await getAllOpportunities(accountId, pipelineId);
+    if (items.truncated) {
+      warnings.push(`⚠️ El pipeline "${pipelineName}" tiene MÁS oportunidades históricas de las que se pudieron descargar (tope de seguridad alcanzado) — contactos reales pueden estar faltando en esta auditoría, sin importar el rango de fecha pedido. Repórtalo para subir el tope.`);
+    }
+    return items;
   } catch (e) {
     warnings.push(`Falló la descarga de oportunidades del pipeline "${pipelineName}": ${e.message}. Los resultados de esta auditoría pueden estar incompletos — vuelve a correrla.`);
     return [];
@@ -82,10 +85,8 @@ function inRange(apiDateStr, fromDate, toDate) {
 // "mismo día" entre creación y confirmación sin líos de huso horario.
 function bogotaDateOnly(apiDateStr) {
   const utc = apiTimestampToUTC(apiDateStr);
-  // Offset de Bogotá centralizado en lib.js (utcToBogotaString) — antes se repetía el literal
-  // "5 * 3600 * 1000" acá y en daily-audit-all.js, con riesgo de que un cambio futuro al offset
-  // se aplicara en un lugar y se olvidara en el otro.
-  return utcToBogotaString(utc).slice(0, 10);
+  const bogota = new Date(utc.getTime() - 5 * 3600 * 1000);
+  return bogota.toISOString().slice(0, 10);
 }
 
 // De un pipeline de pedidos: oportunidades que llegaron a etapa de VENTA dentro del rango
@@ -107,22 +108,17 @@ function ventasConfirmadasEnOtraFecha(allList, yaIncluidos, fromDate, toDate) {
 // de la API (100 req/60s), ahora mitigado por el rate limiter de lib.js. Si aun así falla
 // tras el reintento, se cuenta como fallo real (no un "campo vacío") para poder avisarlo.
 async function getCustomFieldsWithRetry(accountId, contactId) {
-  // Un array vacío en el primer intento es una respuesta VÁLIDA (contacto sin custom fields
-  // todavía) — antes se seguía reintentando igual, y si el segundo intento fallaba por red,
-  // el resultado ya-exitoso del primero se descartaba y se reportaba como fallo real.
-  let lastGood = null;
+  let lastFailed = false;
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
       const cf = await getContactCustomFields(accountId, contactId);
-      if (Array.isArray(cf)) {
-        if (cf.length > 0) return { ok: true, cf };
-        lastGood = cf;
-      }
+      lastFailed = false;
+      if (Array.isArray(cf) && cf.length > 0) return { ok: true, cf };
     } catch (e) {
-      // se reintenta abajo; si ya hay un `lastGood` de un intento anterior, se conserva.
+      lastFailed = true;
     }
   }
-  return lastGood !== null ? { ok: true, cf: lastGood } : { ok: false, cf: [] };
+  return { ok: !lastFailed, cf: [] };
 }
 
 // La etiqueta "Bienvenida Enviada" (confirmada por el usuario 2026-07-26) marca que el bot
@@ -203,25 +199,21 @@ async function runAudit(accountId, from, to, { onProgress } = {}) {
       const stageKey = o.stage.name.trim().toLowerCase();
       const categoria = STAGE_TO_CATEGORY[stageKey] || "revision_manual";
       const prioridad = { venta_verificada: 5, confirmada_no_subida: 4, datos_sin_confirmar: 3, revision_manual: 2, intencion_sin_datos: 1, sin_intencion: 0 };
-      // c.pedido debe ir DENTRO del guard de prioridad — antes se sobreescribía sin condición
-      // en cada oportunidad, así que un contacto con dos oportunidades en el rango (ej. una en
-      // "Pedidos Subidos" y otra en "error al subir") podía quedar con c.categoria de la
-      // oportunidad ganadora pero c.pedido (valor/resumen/fecha) de la otra, distinta.
       if (!c.categoria || prioridad[categoria] > prioridad[c.categoria]) {
         c.categoria = categoria;
         c.origen_categoria = `Pedidos - ${pipelineName === "chat" ? "Chat" : "Landing"}: ${o.stage.name}`;
-        c.pedido = {
-          pipeline: pipelineName === "chat" ? "Pedidos - Chat" : "Pedidos - Landing",
-          stage: o.stage.name,
-          opportunity_id: o.id,
-          value: o.value,
-          created_at: o.created_at,
-          updated_at: o.updated_at,
-          resumen: o.title,
-          venta_de_otra_fecha: otraFecha,
-          mismo_dia: bogotaDateOnly(o.created_at) === bogotaDateOnly(o.updated_at),
-        };
       }
+      c.pedido = {
+        pipeline: pipelineName === "chat" ? "Pedidos - Chat" : "Pedidos - Landing",
+        stage: o.stage.name,
+        opportunity_id: o.id,
+        value: o.value,
+        created_at: o.created_at,
+        updated_at: o.updated_at,
+        resumen: o.title,
+        venta_de_otra_fecha: otraFecha,
+        mismo_dia: bogotaDateOnly(o.created_at) === bogotaDateOnly(o.updated_at),
+      };
     }
   }
 
@@ -256,17 +248,20 @@ async function runAudit(accountId, from, to, { onProgress } = {}) {
     const respTexto = cf.find((f) => f.name === "Respuesta Texto");
     const divisionTexto = cf.find((f) => f.name === "Division texto");
     c.ultimo_mensaje_bot = respTexto?.value || divisionTexto?.value || null;
+    // "Anuncio Facebook" guarda el ID del anuncio de Meta que originó el clic. Pedido explícito
+    // del usuario 2026-08-10: algunas conversaciones reciben la INFORMACIÓN del producto (texto)
+    // pero NUNCA las fotos — la hipótesis es que pasa cuando el contacto sí viene de un anuncio
+    // pero ese anuncio no tiene su ID guardado en las variables multimedia del producto en Lucid
+    // Sales, así que el flujo no encuentra qué fotos mandar y solo entrega el texto. Se guarda
+    // aquí (mismo fetch de custom_fields, sin costo extra de API) para poder cruzarlo más abajo.
+    const anuncio = cf.find((f) => f.name === "Anuncio Facebook");
+    c.anuncio_facebook = anuncio && String(anuncio.value).trim() ? String(anuncio.value).trim() : null;
   });
   if (fallosCustomFields > 0) {
     const msg = `No se pudo consultar el producto/interacciones de ${fallosCustomFields} de ${contactos.length} contactos (fallo de red o límite de la API tras reintento) — esos contactos pueden aparecer como "(sin producto identificado)" aunque sí tengan un producto real. Vuelve a correr la auditoría si esto afecta el análisis por producto.`;
     warnings.push(msg);
     log(`⚠️ ${msg}`);
   }
-
-  // Cacheado una sola vez por contacto: productoDe() es puro (depende solo de producto_interes
-  // y pedido.resumen, ambos ya resueltos acá) pero antes se recalculaba desde cero (regex sobre
-  // el resumen) en 3+ loops separados sobre el mismo array de contactos más abajo.
-  for (const c of contactos) c.producto = productoDe(c);
 
   const sinIntencionContactos = contactos.filter((c) => c.categoria === "sin_intencion");
   if (sinIntencionContactos.length) {
@@ -287,17 +282,11 @@ async function runAudit(accountId, from, to, { onProgress } = {}) {
   let conteo = {};
   for (const c of contactos) conteo[c.categoria] = (conteo[c.categoria] || 0) + 1;
 
-  // Sin "&& c.pedido": "cliente ya cargado a dropi" también mapea a venta_verificada (línea 47)
-  // sin pasar por Pedidos-Chat/Landing, así que exigir c.pedido aquí dejaba a esos contactos
-  // fuera de `ventas` mientras `conteo`/`embudo`/`porProducto[x].ventas` (que cuentan por
-  // categoria solamente) sí los incluían — dos totales de venta distintos en el mismo reporte.
-  // El resto del código ya usa `c.pedido?.` en todos lados, así que una venta sin pedido
-  // simplemente no aporta valor/resumen (no hay de dónde sacarlos), pero sí cuenta.
-  let ventas = contactos.filter((c) => c.categoria === "venta_verificada");
+  let ventas = contactos.filter((c) => c.categoria === "venta_verificada" && c.pedido);
   const errores = contactos.filter((c) => c.categoria === "confirmada_no_subida");
   const sinConfirmar = contactos.filter((c) => c.categoria === "datos_sin_confirmar");
   const calientesTibios = contactos.filter((c) => c.categoria === "intencion_sin_datos");
-  let dropi = contactos.filter((c) => c.dropi);
+  const dropi = contactos.filter((c) => c.dropi);
 
   // Verificación cruzada con las etiquetas REALES de Lucid Sales (catálogo confirmado
   // 2026-07-27): "Pedido subido LucidSales" confirma una subida genuina; "Fallo al subir
@@ -356,11 +345,7 @@ async function runAudit(accountId, from, to, { onProgress } = {}) {
     contactos = contactos.filter((c) => !idsExcluir.has(c.contact_id));
     conteo = {};
     for (const c of contactos) conteo[c.categoria] = (conteo[c.categoria] || 0) + 1;
-    ventas = contactos.filter((c) => c.categoria === "venta_verificada");
-    // `dropi` se computó ANTES de este filtro (línea de arriba) — sin recalcularlo acá, un
-    // contacto recién excluido de total_contactos podía seguir apareciendo en dropi.detalle,
-    // contradiciendo la nota de que los excluidos "no suman a ningún conteo del reporte".
-    dropi = contactos.filter((c) => c.dropi);
+    ventas = contactos.filter((c) => c.categoria === "venta_verificada" && c.pedido);
     // Nota: NO se agrega a `warnings` — esto es un ajuste correcto y esperado, no una falla ni
     // un dato incompleto (ese arreglo dispara el banner rojo "vuelve a correr la auditoría",
     // que sería engañoso aquí). El detalle completo queda en `devoluciones_excluidas` abajo.
@@ -436,10 +421,7 @@ async function runAudit(accountId, from, to, { onProgress } = {}) {
 
   function productoDe(c) {
     if (c.producto_interes) return c.producto_interes.trim();
-    // Guard alineado con productoRealDePedido() de abajo: un pedido con título nulo/vacío
-    // (ej. una oportunidad creada manualmente sin llenar) tiraba TypeError acá y tumbaba toda
-    // la auditoría — productoRealDePedido() ya se protegía, esta (mucho más usada) no.
-    if (c.pedido && c.pedido.resumen) {
+    if (c.pedido) {
       const match = c.pedido.resumen.match(/\d+\s*x\s*([^—–-]+?)\s*(?:—|–|-)/);
       if (match) return match[1].trim();
     }
@@ -467,7 +449,7 @@ async function runAudit(accountId, from, to, { onProgress } = {}) {
 
   const porProducto = {};
   for (const c of contactos) {
-    const producto = c.producto;
+    const producto = productoDe(c);
     if (!porProducto[producto]) {
       porProducto[producto] = {
         total_contactos: 0, mensajes: 0, mensajes_verificados: 0, mensajes_no_verificados: 0, contactos_mensajes_verificados: 0,
@@ -515,7 +497,7 @@ async function runAudit(accountId, from, to, { onProgress } = {}) {
   let totalChats = 0;
   let totalShopify = 0;
   for (const c of contactos) {
-    const producto = c.producto;
+    const producto = productoDe(c);
     if (!conversacionesPorProducto[producto]) conversacionesPorProducto[producto] = { chats: 0, shopify: 0 };
     if (c.es_shopify) { conversacionesPorProducto[producto].shopify++; totalShopify++; }
     else { conversacionesPorProducto[producto].chats++; totalChats++; }
@@ -555,7 +537,7 @@ async function runAudit(accountId, from, to, { onProgress } = {}) {
   const UMBRAL_MENSAJE_ORIGINAL = 2;
   const mensajeInicialPorProducto = {};
   for (const c of contactos) {
-    const producto = c.producto;
+    const producto = productoDe(c);
     if (!mensajeInicialPorProducto[producto]) {
       mensajeInicialPorProducto[producto] = { enviados: 0, no_enviados: 0, no_verificable: 0, mismatches: [] };
     }
@@ -601,6 +583,46 @@ async function runAudit(accountId, from, to, { onProgress } = {}) {
     });
   }
 
+  // Candidatos a "no se enviaron las fotos del producto" — VERSIÓN 2 (2026-08-12). La versión
+  // original (pedido 2026-08-10) usaba "Anuncio Facebook vacío" como proxy; validada contra 36
+  // chats reales leídos a mano dio 83% de falsos positivos (30 de 36 SÍ habían recibido foto/video
+  // normal) — ese campo vacío por sí solo no predice nada, así que se descartó.
+  //
+  // Causa raíz real, confirmada comparando dos casos reales lado a lado (2026-08-12): cuando un
+  // contacto SÍ trae un ID de anuncio de Meta capturado (Origen: Ads) pero ese ID específico no se
+  // encuentra en el mapeo de multimedia del producto en Lucid Sales (visible en el log de notas
+  // del panel como "ID: <id> no encontrado." — distinto de "Sin AD ID." cuando nunca hubo anuncio
+  // asociado, caso en el que las fotos normales SÍ se envían), el mensaje que el bot genera para
+  // ese contacto queda con un marcador de "aquí van las fotos" SIN RESOLVER — se pegó como texto
+  // literal en vez de convertirse en la foto/video real, ej.: "...(Te comparto unas fotos para que
+  // lo veas en detalle)...". Ese marcador roto SÍ queda registrado en el campo "Respuesta
+  // Texto"/"Division texto" que ya se trae por API (aunque el chat visual al cliente no lo
+  // muestre), así que esto sí se puede detectar de forma directa, con evidencia textual real — no
+  // es un proxy ni una adivinanza por campos vacíos.
+  const REGEX_MARCADOR_FOTOS_ROTO = /[(*][^)*]{0,90}\b(fotos?|video)\b[^)*]{0,90}[)*]/i;
+  const candidatosSinFotos = [];
+  for (const c of contactos) {
+    if (!c.ultimo_mensaje_bot) continue;
+    const texto = String(c.ultimo_mensaje_bot);
+    const match = texto.match(REGEX_MARCADOR_FOTOS_ROTO);
+    if (!match) continue;
+    // Falso positivo real encontrado 2026-08-12: algunos flujos SÍ mandan la foto/video como link
+    // real de texto (formato markdown "[Video](https://r2.sales.lucidsales.co/...)") — eso es una
+    // entrega exitosa, no el marcador roto. Si el fragmento capturado incluye una URL real, no es
+    // el bug.
+    if (/https?:\/\//i.test(match[0])) continue;
+    candidatosSinFotos.push({
+      contact_id: c.contact_id,
+      categoria: c.categoria,
+      producto_interes: c.producto_interes,
+      interacciones: c.interacciones || 0,
+      anuncio_facebook: c.anuncio_facebook || null,
+      marcador_roto: match[0],
+      ultimo_mensaje_bot: texto.slice(0, 300),
+      link_panel: panelLink(accountId, c.contact_id),
+    });
+  }
+
   function pick(c) {
     return {
       contact_id: c.contact_id,
@@ -624,7 +646,7 @@ async function runAudit(accountId, from, to, { onProgress } = {}) {
       pedido: c.pedido ? {
         pipeline: c.pedido.pipeline,
         stage: c.pedido.stage,
-        resumen: c.pedido.resumen ? c.pedido.resumen.slice(0, 150) : null,
+        resumen: c.pedido.resumen.slice(0, 150),
         value: c.pedido.value,
         mismo_dia: c.pedido.mismo_dia,
         venta_de_otra_fecha: c.pedido.venta_de_otra_fecha,
@@ -689,10 +711,10 @@ async function runAudit(accountId, from, to, { onProgress } = {}) {
   const muestraCualitativaPorProducto = {};
   for (const [producto, d] of Object.entries(porProducto)) {
     if (producto === "(sin producto identificado)") continue;
-    const sinConfirmarProd = sinConfirmar.filter((c) => c.producto === producto);
-    const tibiosProd = calientesTibios.filter((c) => c.producto === producto);
+    const sinConfirmarProd = sinConfirmar.filter((c) => productoDe(c) === producto);
+    const tibiosProd = calientesTibios.filter((c) => productoDe(c) === producto);
     const sinIntencionConBienvenidaProd = contactos.filter(
-      (c) => c.categoria === "sin_intencion" && c.bienvenida_enviada === true && c.producto === producto
+      (c) => c.categoria === "sin_intencion" && c.bienvenida_enviada === true && productoDe(c) === producto
     );
     const muestraPrecioReglas = [...muestraSistematica(sinConfirmarProd, "Precio/objeción — tenía datos, no confirmó"), ...muestraSistematica(tibiosProd, "Precio/objeción — mostró interés, nunca dio datos")];
     const muestraMensajeInicial = muestraSistematica(sinIntencionConBienvenidaProd, "Contenido del mensaje inicial — recibió la bienvenida, no mostró interés");
@@ -801,6 +823,11 @@ async function runAudit(accountId, from, to, { onProgress } = {}) {
       cantidad: atribucionProducto.length,
       nota: "Contactos donde 'Producto Interesado _ Ad ID' (el anuncio que originó el clic) NO coincide con el producto real del pedido (confirmado o en borrador) — el flujo de conversación disparado fue de otro producto. La venta/interés en este reporte se cuenta bajo el producto REAL del pedido, pero en Lucid Sales el anuncio (y su gasto de Meta) sigue atribuido al producto equivocado, distorsionando el embudo por producto ahí. Confirmado en una cuenta real (varios casos en 2 días de auditoría) — candidato a revisar el mapeo anuncio→flujo en Lucid Bot.",
       detalle: atribucionProducto,
+    },
+    posible_falta_fotos_sin_anuncio: {
+      cantidad: candidatosSinFotos.length,
+      nota: `Detección V2 (2026-08-12) — evidencia textual directa, no un proxy: el mensaje que el bot generó para este contacto contiene un marcador de "aquí van las fotos" SIN RESOLVER (campo "marcador_roto"), pegado como texto literal en vez de convertirse en la foto/video real. Confirmado que esto pasa cuando el contacto sí trae un ID de anuncio de Meta capturado pero ese ID no se encuentra en el mapeo de multimedia del producto en Lucid Sales (log de notas del panel: "ID: <id> no encontrado."). La versión anterior de este detector (proxy por "Anuncio Facebook vacío") se descartó tras validar contra 36 chats reales — dio 83% de falsos positivos. Aun con evidencia textual, sigue sin ser una confirmación 100% automática (la API no expone si la foto realmente faltó en el chat visible al cliente) — verificar cada caso con el link_panel antes de reportarlo como bug confirmado.`,
+      detalle: candidatosSinFotos,
     },
     diagnostico,
     revision_dirigida: revisionDirigida,

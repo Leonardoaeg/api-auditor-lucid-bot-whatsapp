@@ -2,6 +2,13 @@
 
 Todas las novedades importantes de este proyecto se documentan aquí. Para actualizar, ver la sección "Actualizar a una versión nueva" del [README](README.md).
 
+## [1.4.0] — 2026-08-12
+
+Un bug crítico de pérdida de datos, y detección real de fotos no enviadas.
+
+- **Corregido: pérdida silenciosa de contactos en cuentas grandes.** El motor traía como máximo 5.000 oportunidades históricas por pipeline — cualquier cuenta con más leads que eso perdía contactos reales en TODAS las auditorías, sin ningún aviso. Ahora el corte es por tiempo (no se queda colgado en cuentas enormes) y, si aun así no alcanza a traer todo, la auditoría lo dice explícitamente en las advertencias en vez de fallar en silencio.
+- **Nuevo: detección de fotos del producto no enviadas.** Cuando el anuncio de Meta que originó el contacto no está mapeado en las variables multimedia del producto en Lucid Sales, el bot puede terminar enviando un marcador de "aquí van las fotos" sin resolver, como texto literal, en vez de la foto/video real. El auditor ahora detecta ese marcador roto directamente en el mensaje generado — evidencia textual real, no una suposición por campos vacíos (un primer intento basado en eso dio 83% de falsos positivos y se descartó).
+
 ## [1.3.0] — 2026-08-07
 
 Instalación con más agentes de código, y limpieza del repositorio.

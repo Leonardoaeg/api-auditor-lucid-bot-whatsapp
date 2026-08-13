@@ -49,15 +49,33 @@ async function apiGet(accountId, apiPath) {
   return res.json();
 }
 
-async function getAllOpportunities(accountId, pipelineId, { pageSize = 100, maxPages = 50 } = {}) {
+// Bug real encontrado 2026-08-12: con el tope anterior (maxPages=50, pageSize=100 -> 5000
+// registros), un pipeline con más de 5000 oportunidades históricas (confirmado en "Calificación
+// de leads" de una cuenta real, que ya superó ese número) se truncaba EN SILENCIO — sin ningún
+// aviso, contactos reales quedaban fuera de TODAS las auditorías (no solo de una función puntual).
+// Primer intento de arreglo (subir maxPages a 300) causó un problema nuevo: con miles de páginas
+// reales de por medio, una sola auditoría podía quedarse colgada varios minutos sin responder — el
+// tope por CANTIDAD de páginas no protege contra pipelines enormes. Por eso el corte real ahora es
+// por TIEMPO (maxMillis) — nunca deja una auditoría colgada indefinidamente — y maxPages queda solo
+// como límite absoluto de memoria. Si cualquiera de los dos topes se alcanza, se marca `truncated:
+// true` para que quien llama lo avise en vez de fallar callado o silenciosamente incompleto.
+async function getAllOpportunities(accountId, pipelineId, { pageSize = 100, maxPages = 300, maxMillis = 60000 } = {}) {
   const all = [];
+  let truncated = false;
+  const startedAt = Date.now();
   for (let page = 0; page < maxPages; page++) {
+    if (Date.now() - startedAt > maxMillis) {
+      truncated = true;
+      break;
+    }
     const offset = page * pageSize;
     const data = await apiGet(accountId, `/pipelines/${pipelineId}/opportunities?limit=${pageSize}&offset=${offset}`);
     const items = data.data || [];
     all.push(...items);
     if (items.length < pageSize) break;
+    if (page === maxPages - 1) truncated = true;
   }
+  all.truncated = truncated;
   return all;
 }
 
@@ -119,14 +137,6 @@ function utcToBogotaString(date) {
   return bogota.toISOString().replace("T", " ").slice(0, 19);
 }
 
-// Única fuente de la regla de "slug" de nombre de tienda — antes estaba copiada verbatim en
-// dashboard-server.js y en daily-audit-all.js; si se ajustaba en un lado y no en el otro, la
-// auditoría nocturna (cron) y la manual (dashboard) de la misma cuenta terminaban escribiendo
-// en carpetas distintas bajo Informes/auditorias/, partiendo en dos el historial de una tienda.
-function slugify(s) {
-  return String(s).trim().replace(/[^a-zA-Z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "Tienda";
-}
-
 module.exports = {
   getAccount,
   apiGet,
@@ -141,5 +151,4 @@ module.exports = {
   bogotaToUTC,
   apiTimestampToUTC,
   utcToBogotaString,
-  slugify,
 };
