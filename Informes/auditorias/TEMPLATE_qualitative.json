@@ -128,5 +128,15 @@
       { "producto": "Producto H", "pedidos_totales": 2, "confirmado": 1, "por_confirmar": 1, "cancelado": 0 }
     ],
     "nota": "'Pedidos totales' aquí es la fuente MÁS CONFIABLE del producto realmente vendido — si difiere de las ventas que Lucid Bot atribuye al mismo producto, puede ser señal de un bug de plantilla/atribución mezclando productos. 'Confirmado' vs 'Por confirmar' vs 'Cancelado' es un estado POSTERIOR a que Lucid Bot marque 'Pedidos Subidos' — una venta_verificada de Lucid Bot puede seguir 'Por confirmar' en Lucid Sales."
+  },
+  "canal_pedidos_lucidsales": {
+    "fuente": "Lucid Sales — /b/pedidos/get-pedidos-light-data, campo 'source' (+ 'shopify_order_id' como señal adicional)",
+    "rango": "2026-01-15 00:00 a 2026-01-15 23:59 (Bogotá) — rango exacto auditado, no el día completo",
+    "total_pedidos": 3,
+    "por_canal": [
+      { "canal": "WhatsApp", "pedidos": 3, "valor_total": 450000 },
+      { "canal": "Shopify", "pedidos": 0, "valor_total": 0 }
+    ],
+    "nota": "Repórtalo aunque un canal quede en 0 — no lo omitas."
   }
 }

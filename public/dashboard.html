@@ -915,6 +915,27 @@ function renderPedidosLucidSales(reporte, qualitative) {
   return html;
 }
 
+// Auditorías en segundo plano (2026-08-13): en vez de esperar una sola conexión HTTP que puede
+// durar 15-20+ minutos en cuentas con pipelines grandes (confirmado hasta 45-48 mil registros
+// históricos), el trabajo arranca aparte y esta función solo consulta su progreso cada 3s — así
+// nunca se corta por un timeout del navegador, sin importar cuánto tarde la auditoría real.
+async function pollAuditJob(jobId, accountId, from) {
+  for (;;) {
+    await new Promise((r) => setTimeout(r, 3000));
+    const res = await fetch(`/api/audit-status?jobId=${encodeURIComponent(jobId)}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Error consultando el progreso');
+    const lastLog = data.log && data.log.length ? data.log[data.log.length - 1].msg : null;
+    const elapsedMin = ((Date.now() - new Date(data.startedAt).getTime()) / 60000).toFixed(1);
+    if (data.status === 'running') {
+      $('status').textContent = `Ejecutando (${elapsedMin} min)... ${lastLog || 'Iniciando...'}`;
+      continue;
+    }
+    if (data.status === 'error') throw new Error(data.error || 'Error desconocido');
+    return data; // status === 'done'
+  }
+}
+
 $('run').addEventListener('click', async () => {
   const accountId = $('account').value;
   const fromDate = $('from').value;
@@ -926,15 +947,16 @@ $('run').addEventListener('click', async () => {
   const to = `${toDate} ${toTime}`;
   $('run').disabled = true;
   $('download').disabled = true;
-  $('status').textContent = 'Ejecutando auditoría (puede tardar 1-2 minutos)...';
+  $('status').textContent = 'Iniciando auditoría en segundo plano...';
   $('results').innerHTML = '';
   try {
-    const res = await fetch('/api/audit', {
+    const startRes = await fetch('/api/audit-async', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ accountId, from, to }),
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Error desconocido');
+    const startData = await startRes.json();
+    if (!startRes.ok) throw new Error(startData.error || 'Error desconocido');
+    const data = await pollAuditJob(startData.jobId, accountId, from);
     render(data.reporte, data.accountName, data.qualitative);
     // Usa la fecha con la que el backend REALMENTE guardó el archivo (data.fecha_guardado), no
     // la fecha cruda del formulario — para rangos de varios días o "hasta ahora" no coinciden

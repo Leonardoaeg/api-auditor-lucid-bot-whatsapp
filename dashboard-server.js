@@ -5,11 +5,10 @@ const fs = require("fs");
 const path = require("path");
 const { runAudit } = require("./audit-core.js");
 const { buildDocxBuffer } = require("./report-generator.js");
-const { slugify } = require("./lib.js");
 
 const PORT = 4545;
 const ACCOUNTS_FILE = path.join(__dirname, "accounts.local.json");
-const AUDITS_DIR = path.join(__dirname, "Informes", "auditorias");
+const AUDITS_DIR = path.join(__dirname, "..", "Informes", "auditorias");
 if (!fs.existsSync(AUDITS_DIR)) fs.mkdirSync(AUDITS_DIR, { recursive: true });
 
 function readAccounts() {
@@ -18,6 +17,10 @@ function readAccounts() {
 function writeAccounts(accounts) {
   fs.writeFileSync(ACCOUNTS_FILE, JSON.stringify(accounts, null, 2));
 }
+function slugify(s) {
+  return String(s).trim().replace(/[^a-zA-Z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "Tienda";
+}
+
 function getAccountsPublic() {
   const accounts = readAccounts();
   return Object.entries(accounts).map(([id, a]) => ({
@@ -89,6 +92,8 @@ function buildQualitativePrompt({ accountId, accountName, from }) {
     ``,
     `PARTE 4 — Pedidos y confirmación REAL por producto (Lucid Sales): entra a panel.lucidsales.co/metricas-lucidsales (con la sesión ya logueada, misma tienda verificada en PARTE 2). Pon el filtro de fecha exacto en "${dateSlug}" (usa "Ayer"/calendario si aplica, o el rango exacto del from/to de esta auditoría). Usa el filtro "Producto" (ícono de embudo junto al botón "Producto") para seleccionar UN producto a la vez de la lista que use el mismo nombre que Lucid Bot y lee con get_page_text la tarjeta "Pedidos totales" (número) y "Confirmación de pedidos" (Confirmado / Por confirmar / Cancelado, con cantidad y %). Repite para cada producto relevante de ${auditFile} → por_producto (prioriza los que tengan ventas o errores en revision_dirigida). ⚠️ IMPORTANTE: "Pedidos totales" de Lucid Sales es la fuente MÁS CONFIABLE del producto real vendido — si difiere de las "ventas" que Lucid Bot atribuye a ese producto (vía Producto Interesado _ Ad ID), es señal de un bug de atribución/plantilla mezclando productos: la diferencia probablemente aparece como pedidos "de más" en otro producto relacionado (revisa cuál producto del mismo catálogo podría estar absorbiendo esas ventas). Documenta cualquier discrepancia encontrada como hallazgo explícito.`,
     ``,
+    `PARTE 4B — Desglose de canal por pedido (WhatsApp vs Shopify vs otros): con la MISMA sesión de Lucid Sales ya logueada (misma tienda verificada en PARTE 2), usa javascript_tool para hacer fetch('/b/pedidos/get-pedidos-light-data?idEmpresa=<ID_EMPRESA>&page=1&itemsPerPage=500&search=&filters=%5B%7B%22name%22%3A%22date%22%2C%22searchValues%22%3A%5B%5D%2C%22sortOrder%22%3A%22desc%22%7D%5D', {credentials:'include', headers:{'x-token': localStorage.getItem('token')}}). idEmpresa se ve en cualquier llamada XHR reciente del panel (Network) o en la URL activa; si no lo tienes a mano, ábrelo con read_network_requests tras cargar /metricas-lucidsales. La respuesta trae {pedidos:[{id, Fecha (UTC, con sufijo Z — a diferencia de los timestamps de Lucid Bot, este SÍ trae Z), producto, source, shopify_order_id, EstadoPedido, ...}], totalRecords}. Convierte cada Fecha de UTC a Bogotá (UTC-5) y quédate solo con los pedidos dentro del rango exacto auditado (mismo from/to de esta auditoría, no el día completo). Agrupa y cuenta por el campo "source" (valores vistos: "WhatsApp", puede haber "Shopify" u otros) — un pedido con shopify_order_id no vacío es señal adicional de canal Shopify aunque "source" no lo diga explícitamente. Si itemsPerPage=500 no alcanza a cubrir el rango (totalRecords > 500 y el pedido más antiguo devuelto todavía cae dentro del rango buscado), sube page para traer más. Guarda el resultado como "canal_pedidos_lucidsales" en el JSON final (ver formato abajo) — esta es la respuesta directa a "cuántas ventas fueron de WhatsApp vs Shopify", no la omitas ni la infieras de otra fuente.`,
+    ``,
     `PARTE 5 — Diagnóstico cualitativo por producto (rúbrica de causa raíz, con chats reales): el motor estadístico automático solo cuenta números — nunca lee lo que realmente se dice. Esta parte SÍ lee conversaciones reales para determinar la causa raíz real, no solo una hipótesis. Usa ${auditFile} → muestra_cualitativa.por_producto — YA viene precalculada (muestreo estratificado 10%, reproducible) con exactamente qué contact_id leer por producto, separados en "casos_precio_reglas" (prueban objeción de precio / reglas del bot) y "casos_mensaje_inicial" (prueban si el contenido del mensaje de bienvenida en sí funciona). NO improvises la muestra ni leas contactos fuera de esta lista — así el resultado es reproducible entre corridas.`,
     `Para cada caso de la muestra, abre el chat real (link_panel) vía Browser tool y clasifica en EXACTAMENTE UNA de estas 7 causas, con una cita textual literal como evidencia (nunca inventes ni resumas de más — cita las palabras reales):`,
     `  - mensaje_inicial_contenido: el mensaje de bienvenida (texto/imagen/video) SÍ llegó pero no genera interés real — evalúa si el contenido es claro, atractivo, y coincide con lo que promete el anuncio que originó el clic.`,
@@ -101,7 +106,7 @@ function buildQualitativePrompt({ accountId, accountName, from }) {
     `  - Si un caso no encaja claramente en ninguna, usa "sin_causa_clara" y explica por qué en 1 línea — no fuerces una categoría.`,
     `Al terminar cada producto, cuenta cuántos casos cayeron en cada causa y reporta la causa DOMINANTE (la más frecuente) como el veredicto cualitativo de ese producto — respetando la "confianza" ya calculada en muestra_cualitativa (baja/media/alta según el tamaño de muestra) al describir qué tan seguro es ese veredicto.`,
     ``,
-    `Guarda TODO el resultado en ${qualFile} con el formato { "hallazgos": [...], "causa_raiz_por_producto": {...}, "diagnostico_cualitativo": { "por_producto": { "<producto>": { "confianza": "baja|media|alta", "muestra_n": N, "pool_total": N, "causa_dominante": "<una de las 7, o sin_causa_clara>", "causas": { "mensaje_inicial_contenido": N, "objecion_precio": N, "bot_error_contexto": N, "bot_alucina": N, "bot_incoherente": N, "bot_abandona_conversacion": N, "leads_baja_calidad": N, "sin_causa_clara": N }, "casos": [ { "contact_id": "...", "causa": "...", "cita": "texto literal del chat", "link_panel": "..." } ] } } }, "mensajes_lucid_sales": { "fuente": "...", "total_mensajes_anuncio": N, "detalle": "...", "por_producto": [{ "producto": "...", "mensajes": N }] }, "pedidos_lucid_sales": { "fecha": "${dateSlug}", "por_producto": [{ "producto": "...", "pedidos_totales": N, "confirmado": N, "por_confirmar": N, "cancelado": N }] } } (plantilla de ejemplo: Informes/auditorias/TEMPLATE_qualitative.json).`,
+    `Guarda TODO el resultado en ${qualFile} con el formato { "hallazgos": [...], "causa_raiz_por_producto": {...}, "diagnostico_cualitativo": { "por_producto": { "<producto>": { "confianza": "baja|media|alta", "muestra_n": N, "pool_total": N, "causa_dominante": "<una de las 7, o sin_causa_clara>", "causas": { "mensaje_inicial_contenido": N, "objecion_precio": N, "bot_error_contexto": N, "bot_alucina": N, "bot_incoherente": N, "bot_abandona_conversacion": N, "leads_baja_calidad": N, "sin_causa_clara": N }, "casos": [ { "contact_id": "...", "causa": "...", "cita": "texto literal del chat", "link_panel": "..." } ] } } }, "mensajes_lucid_sales": { "fuente": "...", "total_mensajes_anuncio": N, "detalle": "...", "por_producto": [{ "producto": "...", "mensajes": N }] }, "pedidos_lucid_sales": { "fecha": "${dateSlug}", "por_producto": [{ "producto": "...", "pedidos_totales": N, "confirmado": N, "por_confirmar": N, "cancelado": N }] }, "canal_pedidos_lucidsales": { "fuente": "Lucid Sales — /b/pedidos/get-pedidos-light-data, campo 'source' (+ 'shopify_order_id' como señal adicional)", "rango": "${dateSlug} a FECHA_FIN exacta auditada", "total_pedidos": N, "por_canal": [{ "canal": "WhatsApp", "pedidos": N, "valor_total": N }, { "canal": "Shopify", "pedidos": N, "valor_total": N }], "nota": "Si un canal no aparece en la muestra, repórtalo igual con pedidos:0 en vez de omitirlo." } } (plantilla de ejemplo: Informes/auditorias/TEMPLATE_qualitative.json).`,
     `Al terminar, avísame con un resumen de los hallazgos más importantes.`,
   ].join("\n");
 }
@@ -110,6 +115,51 @@ function sendJson(res, status, data) {
   const body = JSON.stringify(data);
   res.writeHead(status, { "Content-Type": "application/json; charset=utf-8", "Content-Length": Buffer.byteLength(body) });
   res.end(body);
+}
+
+// Trabajos de auditoría en segundo plano (pedido explícito 2026-08-13): cuentas con pipelines
+// grandes (confirmado: 45.000-48.000 registros históricos en "Calificación de leads" de una
+// cuenta real) necesitan traer TODO para que el conteo sea correcto — priorizado sobre la
+// velocidad ("no importa si se tarda unos minutos, sea un día o sea una semana"). Una sola
+// solicitud HTTP bloqueante de 15-20+ minutos es fragil: cualquier timeout de cliente, proxy o
+// conexión la corta a mitad de camino aunque el servidor siga trabajando bien — no es que la
+// auditoría falle, es que quien la pidió deja de esperar la respuesta. La solución real no es
+// "esperar más" de un lado, es dejar de depender de una sola conexión abierta: la auditoría
+// arranca como un trabajo en memoria con un ID, contesta de inmediato, y el progreso (y el
+// resultado final) se consultan aparte cuantas veces haga falta — sin importar cuánto tarde.
+const auditJobs = new Map(); // jobId -> { status, log: [...], reporte, accountName, qualitative, fecha_guardado, error, startedAt, finishedAt }
+
+function startAuditJob(accountId, from, toExclusive) {
+  const jobId = `${accountId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const job = { status: "running", log: [], reporte: null, accountName: null, qualitative: null, fecha_guardado: null, error: null, startedAt: new Date().toISOString(), finishedAt: null };
+  auditJobs.set(jobId, job);
+
+  (async () => {
+    try {
+      const reporte = await runAudit(accountId, from, toExclusive, {
+        onProgress: (msg) => {
+          job.log.push({ t: new Date().toISOString(), msg });
+          if (job.log.length > 500) job.log.shift(); // no crecer sin límite en auditorías larguísimas
+        },
+      });
+      const dateSlug = computeDateSlug(from, toExclusive);
+      fs.writeFileSync(auditFilePath(accountId, dateSlug), JSON.stringify(reporte, null, 2));
+      const qPath = qualitativeFilePath(accountId, dateSlug);
+      const qualitative = fs.existsSync(qPath) ? JSON.parse(fs.readFileSync(qPath, "utf8")) : null;
+      job.reporte = reporte;
+      job.accountName = getAccountName(accountId);
+      job.qualitative = qualitative;
+      job.fecha_guardado = dateSlug;
+      job.status = "done";
+    } catch (e) {
+      job.error = e.message || String(e);
+      job.status = "error";
+    } finally {
+      job.finishedAt = new Date().toISOString();
+    }
+  })();
+
+  return jobId;
 }
 
 function readBody(req) {
@@ -140,6 +190,34 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, getAccountsPublic());
     }
 
+    // Punto de entrada recomendado para auditorías que pueden tardar (cuentas grandes): arranca
+    // el trabajo y contesta de inmediato con un jobId — nunca mantiene la conexión abierta.
+    if (url.pathname === "/api/audit-async" && req.method === "POST") {
+      const { accountId, from, to } = await readBody(req);
+      if (!accountId || !from || !to) return sendJson(res, 400, { error: "Faltan accountId, from o to" });
+      const toExclusive = /^\d{4}-\d{2}-\d{2}$/.test(to)
+        ? new Date(new Date(to + "T00:00:00Z").getTime() + 24 * 3600 * 1000).toISOString().slice(0, 10)
+        : to;
+      const jobId = startAuditJob(accountId, from, toExclusive);
+      return sendJson(res, 202, { jobId });
+    }
+
+    // Consulta el estado/progreso de un trabajo de auditoría iniciado con /api/audit-async.
+    // status: "running" | "done" | "error". El log trae las últimas líneas de progreso
+    // (descarga de pipelines, custom fields, etc.) para saber que sigue avanzando, no colgado.
+    if (url.pathname === "/api/audit-status" && req.method === "GET") {
+      const jobId = url.searchParams.get("jobId");
+      const job = jobId && auditJobs.get(jobId);
+      if (!job) return sendJson(res, 404, { error: "jobId no encontrado (¿expiró o el servidor se reinició?)" });
+      const base = { status: job.status, startedAt: job.startedAt, finishedAt: job.finishedAt, log: job.log };
+      if (job.status === "error") return sendJson(res, 200, { ...base, error: job.error });
+      if (job.status === "done") return sendJson(res, 200, { ...base, reporte: job.reporte, accountName: job.accountName, qualitative: job.qualitative, fecha_guardado: job.fecha_guardado });
+      return sendJson(res, 200, base);
+    }
+
+    // Versión síncrona original — se mantiene para auditorías rápidas (rangos cortos, cuentas
+    // chicas), pero para cuentas con pipelines grandes puede cortarse por timeout del cliente
+    // antes de terminar. Usar /api/audit-async + /api/audit-status para esos casos.
     if (url.pathname === "/api/audit" && req.method === "POST") {
       const { accountId, from, to } = await readBody(req);
       if (!accountId || !from || !to) return sendJson(res, 400, { error: "Faltan accountId, from o to" });
@@ -185,8 +263,8 @@ const server = http.createServer(async (req, res) => {
       const dir = storeDir(accountId);
       const files = fs.readdirSync(dir).filter((f) => /^\d+_\d{4}-\d{2}-\d{2}\.json$/.test(f));
       const porProductoAcum = {};
-      // Detalle día por día por producto — permite comparar un mismo producto entre dos fechas
-      // distintas, en vez de solo ver el acumulado total.
+      // Detalle día por día por producto — permite comparar el mismo producto entre distintas
+      // fechas, en vez de solo ver el acumulado total. Pedido explícito 2026-07-30.
       const porProductoPorFecha = {};
       const items = files.map((f) => {
         const dateSlug = f.match(/_(\d{4}-\d{2}-\d{2})\.json$/)[1];

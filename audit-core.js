@@ -54,7 +54,7 @@ function panelLink(accountId, contactId) {
 // Trae TODO el historial de un pipeline (sin filtrar por fecha) — necesario tanto para
 // filtrar por rango como para detectar contactos recurrentes (que aparecen en otras fechas)
 // y ventas que confirmaron dentro del rango pero se originaron en otra fecha.
-async function fetchPipelineAll(accountId, pipelineName, warnings) {
+async function fetchPipelineAll(accountId, pipelineName, warnings, opts = {}) {
   let pipelineId;
   try {
     pipelineId = await resolvePipelineIdByName(accountId, pipelineName);
@@ -63,7 +63,7 @@ async function fetchPipelineAll(accountId, pipelineName, warnings) {
     return [];
   }
   try {
-    const items = await getAllOpportunities(accountId, pipelineId);
+    const items = await getAllOpportunities(accountId, pipelineId, opts);
     if (items.truncated) {
       warnings.push(`⚠️ El pipeline "${pipelineName}" tiene MÁS oportunidades históricas de las que se pudieron descargar (tope de seguridad alcanzado) — contactos reales pueden estar faltando en esta auditoría, sin importar el rango de fecha pedido. Repórtalo para subir el tope.`);
     }
@@ -150,7 +150,22 @@ async function runAudit(accountId, from, to, { onProgress } = {}) {
   const [pedidosChatAll, pedidosLandingAll, leadsAll] = await Promise.all([
     fetchPipelineAll(accountId, "Pedidos - Chat", warnings),
     fetchPipelineAll(accountId, "Pedidos - Landing", warnings),
-    fetchPipelineAll(accountId, "Calificación de leads", warnings),
+    // "Calificación de leads" recibe un presupuesto de tiempo mucho más largo que los otros dos
+    // pipelines. Pedido explícito 2026-08-13: priorizar que el dato sea CORRECTO por encima de la
+    // velocidad ("no importa si se tarda unos minutos, sea un día o sea una semana") — confirmado
+    // consultando la API directamente que este pipeline en una cuenta real tiene entre 45.000 y
+    // 48.000 registros históricos, y que NO vienen ordenados por fecha (el id interno no se
+    // correlaciona con created_at/updated_at) — así que no hay forma de "parar temprano" sin
+    // arriesgarse a perder justo el tipo de venta que causó este ajuste: un lead viejo que se
+    // reactiva y convierte tarde. La etapa "Cliente ya cargado a Dropi" de ESTE pipeline también
+    // cuenta como venta_verificada (ver LEAD_STAGE_TO_CATEGORY) — truncar de más no solo pierde
+    // contactos informativos, pierde ventas reales del conteo total. Detectado 2026-08-12: Lucid
+    // Sales mostraba 48 ventas reales, la auditoría con el tope viejo solo 45.
+    // 7,200,000 ms = 2 horas: a ~90 solicitudes/60s, una cuenta de 45-48k registros se trae
+    // completa en 5-9 minutos reales — este número es un techo de seguridad, no un límite
+    // práctico. Ahora que /api/audit-async no depende de una sola conexión HTTP abierta (ver
+    // dashboard-server.js), tardar varios minutos deja de ser un problema.
+    fetchPipelineAll(accountId, "Calificación de leads", warnings, { maxMillis: 7200000 }),
   ]);
   if (warnings.length) log(`⚠️ ${warnings.length} advertencia(s): ${warnings.join(" | ")}`);
 
@@ -330,7 +345,7 @@ async function runAudit(accountId, from, to, { onProgress } = {}) {
     }
   }
 
-  // Bug confirmado en una cuenta real: cuando Lucid Sales procesa
+  // Bug confirmado 2026-07-29: cuando Lucid Sales procesa
   // una DEVOLUCIÓN de un pedido viejo (ya en etapa "Pedidos Subidos" de una fecha anterior),
   // actualiza el updated_at de esa oportunidad y le manda al cliente el mensaje automático
   // "tu pedido fue devuelto..." — NO es una confirmación de venta nueva. Sin este filtro,
@@ -441,9 +456,9 @@ async function runAudit(accountId, from, to, { onProgress } = {}) {
     const aBajo = a.toLowerCase();
     const bBajo = b.toLowerCase();
     if (aBajo === bBajo) return true;
-    // Evita falsos positivos por nombres que se superponen como texto (ej. "Vestido X" es
-    // substring de "Enterizo Vestido X") — casi siempre el MISMO producto con dos nombres
-    // distintos en campos distintos de Lucid Bot, no un mismatch real.
+    // Evita falsos positivos por nombres que se superponen como texto (ej. un nombre corto
+    // que es substring del nombre completo del mismo producto) — casi siempre el MISMO
+    // producto con dos nombres distintos en campos distintos de Lucid Bot, no un mismatch real.
     return aBajo.includes(bBajo) || bBajo.includes(aBajo);
   }
 
@@ -526,7 +541,7 @@ async function runAudit(accountId, from, to, { onProgress } = {}) {
       if (p === propio) continue;
       const pBajo = p.toLowerCase();
       // Evita falsos positivos cuando dos nombres de producto distintos se superponen como
-      // texto (ej. "Vestido X" es substring de "Enterizo Vestido X") — casi siempre es el MISMO
+      // texto (ej. un nombre corto que es substring del nombre completo) — casi siempre es el MISMO
       // producto real registrado con dos nombres distintos en campos distintos de Lucid Bot
       // (atribución de anuncio vs. nombre parseado del pedido), no un mismatch real.
       if (propioBajo.includes(pBajo) || pBajo.includes(propioBajo)) continue;
@@ -560,8 +575,8 @@ async function runAudit(accountId, from, to, { onProgress } = {}) {
     }
   }
 
-  // Bug de atribución de anuncio (confirmado leyendo chats reales en una cuenta real, varios
-  // casos en 2 días de auditoría consecutivos): el campo "Producto Interesado _ Ad ID" refleja el
+  // Bug de atribución de anuncio (confirmado 2026-08-07 leyendo chats reales de una cuenta real,
+  // 4 casos en 2 días de auditoría consecutivos): el campo "Producto Interesado _ Ad ID" refleja el
   // anuncio que originó el clic, pero el flujo de conversación que realmente se disparó — y por
   // tanto el producto que la persona terminó comprando — puede ser DISTINTO. Se detecta
   // comparando ese tag contra el producto real parseado del resumen del pedido (confirmado o
@@ -821,7 +836,7 @@ async function runAudit(accountId, from, to, { onProgress } = {}) {
     },
     atribucion_producto: {
       cantidad: atribucionProducto.length,
-      nota: "Contactos donde 'Producto Interesado _ Ad ID' (el anuncio que originó el clic) NO coincide con el producto real del pedido (confirmado o en borrador) — el flujo de conversación disparado fue de otro producto. La venta/interés en este reporte se cuenta bajo el producto REAL del pedido, pero en Lucid Sales el anuncio (y su gasto de Meta) sigue atribuido al producto equivocado, distorsionando el embudo por producto ahí. Confirmado en una cuenta real (varios casos en 2 días de auditoría) — candidato a revisar el mapeo anuncio→flujo en Lucid Bot.",
+      nota: "Contactos donde 'Producto Interesado _ Ad ID' (el anuncio que originó el clic) NO coincide con el producto real del pedido (confirmado o en borrador) — el flujo de conversación disparado fue de otro producto. La venta/interés en este reporte se cuenta bajo el producto REAL del pedido, pero en Lucid Sales el anuncio (y su gasto de Meta) sigue atribuido al producto equivocado, distorsionando el embudo por producto ahí. Confirmado 2026-08-07 en una cuenta real (4 casos en 2 días de auditoría) — candidato a revisar el mapeo anuncio→flujo en Lucid Bot.",
       detalle: atribucionProducto,
     },
     posible_falta_fotos_sin_anuncio: {

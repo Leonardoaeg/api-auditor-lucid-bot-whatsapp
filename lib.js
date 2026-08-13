@@ -53,13 +53,17 @@ async function apiGet(accountId, apiPath) {
 // registros), un pipeline con más de 5000 oportunidades históricas (confirmado en "Calificación
 // de leads" de una cuenta real, que ya superó ese número) se truncaba EN SILENCIO — sin ningún
 // aviso, contactos reales quedaban fuera de TODAS las auditorías (no solo de una función puntual).
-// Primer intento de arreglo (subir maxPages a 300) causó un problema nuevo: con miles de páginas
-// reales de por medio, una sola auditoría podía quedarse colgada varios minutos sin responder — el
-// tope por CANTIDAD de páginas no protege contra pipelines enormes. Por eso el corte real ahora es
-// por TIEMPO (maxMillis) — nunca deja una auditoría colgada indefinidamente — y maxPages queda solo
-// como límite absoluto de memoria. Si cualquiera de los dos topes se alcanza, se marca `truncated:
-// true` para que quien llama lo avise en vez de fallar callado o silenciosamente incompleto.
-async function getAllOpportunities(accountId, pipelineId, { pageSize = 100, maxPages = 300, maxMillis = 60000 } = {}) {
+// Primer intento de arreglo (subir maxPages a 300 = 30.000 registros) resultó SEGUIR truncando —
+// la misma cuenta real ya tiene 45.000-48.000 registros en ese pipeline (confirmado consultando la
+// API directamente, offset por offset). Pedido explícito 2026-08-13: la corrección es correctitud
+// por encima de velocidad, sin importar cuánto tarde — así que maxPages ahora es solo un techo de
+// seguridad contra un bucle infinito real (nunca debería alcanzarse en la práctica: el loop ya
+// para solo en cuanto una página devuelve menos de `pageSize` registros, es decir, en cuanto se
+// llega al final real de los datos — subir este número no hace más lenta una cuenta chica, solo
+// deja de cortar de más a una cuenta grande). maxMillis (ver dashboard-server.js /api/audit-async)
+// es el segundo techo de seguridad, ya no un límite práctico porque la auditoría corre en segundo
+// plano sin depender de una sola conexión HTTP abierta.
+async function getAllOpportunities(accountId, pipelineId, { pageSize = 100, maxPages = 2000, maxMillis = 60000 } = {}) {
   const all = [];
   let truncated = false;
   const startedAt = Date.now();

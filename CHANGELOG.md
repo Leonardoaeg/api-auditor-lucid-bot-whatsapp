@@ -2,6 +2,14 @@
 
 Todas las novedades importantes de este proyecto se documentan aquí. Para actualizar, ver la sección "Actualizar a una versión nueva" del [README](README.md).
 
+## [1.5.0] — 2026-08-13
+
+Corrección definitiva de la paginación en cuentas grandes, auditorías asíncronas, y desglose de canal por pedido.
+
+- **Corregido: el corte de 5.000 registros de la v1.4.0 seguía sin alcanzar en cuentas realmente grandes.** Se confirmó (consultando la API directamente) que un pipeline de una cuenta real puede tener 45.000–48.000 oportunidades históricas, y que NO vienen ordenadas por fecha — están dispersas en todo el rango de IDs internos, así que no hay forma segura de "parar antes" por fecha. El tope de páginas ahora es solo un techo de seguridad contra un bucle infinito (el corte real sigue siendo "la página trajo menos registros de los pedidos", es decir, el final real de los datos).
+- **Nuevo: auditorías en segundo plano, sin límite de tiempo de conexión.** Antes, una auditoría larga podía fallar por timeout del lado del cliente aunque el servidor ya hubiera terminado bien. Ahora `POST /api/audit-async` devuelve un `jobId` al instante y el dashboard hace polling cada 3s contra `GET /api/audit-status` hasta que termina — sin depender de mantener una sola conexión HTTP abierta durante minutos u horas.
+- **Nuevo: desglose de canal por pedido (WhatsApp vs Shopify vs otros) en el análisis cualitativo.** El flujo de "Pedir análisis cualitativo" ahora consulta directamente el listado real de pedidos de Lucid Sales y reporta automáticamente cuántas ventas del rango auditado vinieron por cada canal, en vez de requerir investigarlo a mano cada vez.
+
 ## [1.4.0] — 2026-08-12
 
 Un bug crítico de pérdida de datos, y detección real de fotos no enviadas.
