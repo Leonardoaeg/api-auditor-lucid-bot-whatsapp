@@ -1,7 +1,15 @@
 const fs = require("fs");
 const path = require("path");
 
-const ACCOUNTS_FILE = path.join(__dirname, "accounts.local.json");
+// Misma lógica de DATA_DIR/ACCOUNTS_FILE que dashboard-server.js — deben apuntar SIEMPRE al
+// mismo archivo, porque este módulo es el que realmente usa el token para hablar con la API de
+// Lucid Bot durante una auditoría. Sin esto, en un hosting con DATA_DIR configurado el dashboard
+// vería las tiendas guardadas pero las auditorías fallarían buscando el archivo en el lugar
+// viejo. Pedido explícito 2026-08-13 ("prepararlo para usarlo desde cualquier hosting").
+const DATA_DIR = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : null;
+const ACCOUNTS_FILE = process.env.ACCOUNTS_FILE
+  ? path.resolve(process.env.ACCOUNTS_FILE)
+  : DATA_DIR ? path.join(DATA_DIR, "accounts.local.json") : path.join(__dirname, "accounts.local.json");
 
 function getAccount(accountId) {
   const accounts = JSON.parse(fs.readFileSync(ACCOUNTS_FILE, "utf8"));

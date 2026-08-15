@@ -7,17 +7,23 @@ const fs = require("fs");
 const path = require("path");
 const { runAudit } = require("./audit-core.js");
 const { buildDocxBuffer } = require("./report-generator.js");
-const { slugify, utcToBogotaString } = require("./lib.js");
 
-const ACCOUNTS_FILE = path.join(__dirname, "accounts.local.json");
-const AUDITS_DIR = path.join(__dirname, "Informes", "auditorias");
+// Misma lógica de DATA_DIR que dashboard-server.js/lib.js — para que este script (pensado para
+// correr por cron, en local o en un hosting) lea/escriba en el mismo lugar que el dashboard.
+const DATA_DIR = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : null;
+const ACCOUNTS_FILE = process.env.ACCOUNTS_FILE
+  ? path.resolve(process.env.ACCOUNTS_FILE)
+  : DATA_DIR ? path.join(DATA_DIR, "accounts.local.json") : path.join(__dirname, "accounts.local.json");
+const AUDITS_DIR = process.env.AUDITS_DIR
+  ? path.resolve(process.env.AUDITS_DIR)
+  : DATA_DIR ? path.join(DATA_DIR, "Informes", "auditorias") : path.join(__dirname, "..", "Informes", "auditorias");
 if (!fs.existsSync(AUDITS_DIR)) fs.mkdirSync(AUDITS_DIR, { recursive: true });
 
-// Offset de Bogotá centralizado en lib.js (utcToBogotaString) — antes se repetía el literal
-// "5 * 3600 * 1000" acá; si se desalinea con el resto del código, la ventana de la auditoría
-// nocturna (que corre sin supervisión) se corre una hora respecto al resto del sistema.
+// Bogotá = UTC-5 todo el año.
 function bogotaWindow7amTo7am() {
-  const todayStr = utcToBogotaString(new Date()).slice(0, 10); // fecha Bogotá de "hoy"
+  const nowUtc = new Date();
+  const bogotaNow = new Date(nowUtc.getTime() - 5 * 3600 * 1000);
+  const todayStr = bogotaNow.toISOString().slice(0, 10); // fecha Bogotá de "hoy"
   const to = `${todayStr} 07:00`;
   const yesterday = new Date(new Date(`${todayStr}T00:00:00Z`).getTime() - 24 * 3600 * 1000);
   const yesterdayStr = yesterday.toISOString().slice(0, 10);
@@ -25,6 +31,9 @@ function bogotaWindow7amTo7am() {
   return { from, to, fileDateSlug: yesterdayStr }; // el archivo se nombra con el día que arrancó la ventana
 }
 
+function slugify(s) {
+  return String(s).trim().replace(/[^a-zA-Z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "Tienda";
+}
 function storeDir(info) {
   const dir = path.join(AUDITS_DIR, info.slug || slugify(info.name));
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
@@ -48,16 +57,7 @@ async function main() {
 
       const qPath = path.join(storeDir(info), `${accountId}_${fileDateSlug}_qualitative.json`);
       const qualitative = fs.existsSync(qPath) ? JSON.parse(fs.readFileSync(qPath, "utf8")) : null;
-      // Antes solo pasaba mensajesLucidSales — si ya existía un JSON de análisis cualitativo en
-      // disco (de una corrida manual anterior) el .docx nocturno se generaba sin
-      // pedidosLucidSales/diagnosticoCualitativo, mostrando esas secciones como "sin datos"
-      // aunque el dato real ya existiera (dashboard-server.js /api/report sí los pasa).
-      const buf = await buildDocxBuffer(reporte, {
-        accountName: info.name,
-        mensajesLucidSales: qualitative?.mensajes_lucid_sales || null,
-        pedidosLucidSales: qualitative?.pedidos_lucid_sales || null,
-        diagnosticoCualitativo: qualitative?.diagnostico_cualitativo || null,
-      });
+      const buf = await buildDocxBuffer(reporte, { accountName: info.name, mensajesLucidSales: qualitative?.mensajes_lucid_sales || null });
       const fname = `Auditoria_${info.slug || slugify(info.name)}_${fileDateSlug}.docx`;
       fs.writeFileSync(path.join(storeDir(info), fname), buf);
 

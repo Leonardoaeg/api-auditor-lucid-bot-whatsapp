@@ -90,6 +90,13 @@
   .hf-cal-footer .hf-range-text { font-size: 12px; color: var(--gray); }
   .hf-cal-footer .hf-actions { display: flex; gap: 6px; }
   .hf-cal-footer button.secondary, .hf-cal-footer button:not(.secondary) { padding: 6px 14px; font-size: 12px; }
+
+  /* Tooltip de los mini-gráficos de tendencia (línea de conversión / barras de ventas). */
+  .tc-tooltip {
+    position: absolute; background: var(--text); color: white; font-size: 11px;
+    padding: 4px 8px; border-radius: 6px; pointer-events: none; white-space: nowrap;
+    transform: translate(-50%, -125%); z-index: 5;
+  }
   #status { font-size: 13px; color: var(--gray); margin-left: 8px; }
   .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; margin-bottom: 24px; }
   .kpi { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
@@ -539,7 +546,9 @@ async function loadHistory(accountId) {
             <a class="link" href="/api/report?accountId=${encodeURIComponent(accountId)}&from=${it.fecha}">descargar</a>
           </td>
         </tr>`).join('');
-      resumenEl.innerHTML = renderOperacionResumen(data.resumen, data.accountName);
+      resumenEl.innerHTML = renderOperacionResumen(data.resumen, data.accountName, data.items);
+      wireTrendChartHover('trend-conv');
+      wireTrendChartHover('trend-ventas');
     }
     const rangoTxt = from || to ? ` — rango ${from || '(inicio)'} a ${to || '(hoy)'}` : '';
     $('history-status').textContent = `${data.items.length} auditoría(s) guardada(s) para ${data.accountName}${rangoTxt}.`;
@@ -550,7 +559,11 @@ async function loadHistory(accountId) {
 
 let ultimoPorProductoPorFecha = {};
 
-function renderOperacionResumen(r, accountName) {
+// Umbral mínimo de contactos acumulados para confiar en un % de conversión — por debajo de
+// esto, el número existe pero es fácil de malinterpretar (ej. 1 venta de 2 contactos = "50%").
+const MUESTRA_MINIMA_EFECTIVIDAD = 15;
+
+function renderOperacionResumen(r, accountName, items) {
   if (!r || !r.total_auditorias) return '';
   ultimoPorProductoPorFecha = r.por_producto_por_fecha || {};
   let html = `<div class="kpis" style="margin-bottom:14px;">
@@ -561,6 +574,7 @@ function renderOperacionResumen(r, accountName) {
     <div class="kpi"><div class="num">${r.conversion_promedio}%</div><div class="label">Conversión promedio</div></div>
     ${r.total_sospechosas > 0 ? `<div class="kpi" style="border-color:var(--red);"><div class="num" style="color:var(--red);">${r.total_sospechosas}</div><div class="label">Ventas sospechosas (todo el histórico)</div></div>` : ''}
   </div>`;
+  html += renderTendenciaGeneral(items);
   if (r.por_producto && r.por_producto.length) {
     html += `<table><thead><tr><th>Producto</th><th>Contactos (acum.)</th><th>Ventas (acum.)</th><th>Conversión</th><th>Valor (acum.)</th><th>Auditorías donde aparece</th></tr></thead><tbody>`;
     for (const p of r.por_producto) {
@@ -568,6 +582,7 @@ function renderOperacionResumen(r, accountName) {
     }
     html += `</tbody></table>`;
   }
+  html += renderEfectividadProducto(r.por_producto);
   const productosComparables = Object.keys(ultimoPorProductoPorFecha).sort();
   if (productosComparables.length) {
     html += `<div class="controls" style="margin-top:16px;">
@@ -582,6 +597,154 @@ function renderOperacionResumen(r, accountName) {
     <div id="comparacion-producto-resultado"></div>`;
   }
   return html;
+}
+
+// Ranking de qué producto convierte mejor (ventas/contactos), pedido explícito 2026-08-13
+// ("necesitamos que aparezca efectividad por producto, cuál es más efectivo"). Se excluyen los
+// productos sin identificar y se marca con aviso cualquier producto con muestra chica — su %
+// es real pero poco confiable con pocos contactos (ej. 1/2 = 50%).
+function renderEfectividadProducto(porProducto) {
+  if (!porProducto || !porProducto.length) return '';
+  // "Nombre producto: X" es un artefacto de extracción del motor de auditoría (una etiqueta de
+  // texto que se coló como si fuera el nombre del producto) — siempre son cubos chiquitos con
+  // ~100% de conversión, que duplican un producto real ya listado con su nombre limpio. Se
+  // excluyen aquí para que no ganen el primer puesto por ruido de datos, no porque sean productos
+  // distintos de verdad.
+  const elegibles = porProducto.filter((p) => p.producto !== '(sin producto identificado)' && p.producto !== 'NO_MATCH' && !p.producto.startsWith('Nombre producto:'));
+  if (!elegibles.length) return '';
+  // Muestra confiable primero (ordenada por conversión), muestra baja después — si no, un
+  // producto con 1 venta de 1 contacto (100%) le gana el primer puesto a uno real con cientos
+  // de contactos, y el ranking deja de decir algo útil. Corregido tras verlo pasar en vivo.
+  const confiables = elegibles.filter((p) => p.contactos >= MUESTRA_MINIMA_EFECTIVIDAD).sort((a, b) => b.conversion_pct - a.conversion_pct);
+  const muestraBajaList = elegibles.filter((p) => p.contactos < MUESTRA_MINIMA_EFECTIVIDAD).sort((a, b) => b.conversion_pct - a.conversion_pct);
+  const ranked = [...confiables, ...muestraBajaList];
+  const medals = ['🥇', '🥈', '🥉'];
+  const top = confiables[0];
+  let html = `<div style="margin-top:20px;">
+    <h3 style="margin:0 0 4px;font-size:15px;color:var(--purple);">🏆 Efectividad por producto — cuál convierte mejor</h3>
+    <p class="hint" style="margin-top:0;">Ordenado por % de conversión (ventas ÷ contactos), con los productos de muestra confiable primero. Los que tienen menos de ${MUESTRA_MINIMA_EFECTIVIDAD} contactos acumulados van al final con aviso de "muestra baja" — su % es real pero puede cambiar mucho con el próximo contacto, así que no compite por el primer puesto.</p>`;
+  if (top) {
+    html += `<p style="margin:6px 0 12px;">🥇 <b style="color:var(--green);">${top.producto}</b> es el más efectivo con muestra confiable: <b>${top.conversion_pct}%</b> de conversión (${top.ventas} ventas de ${top.contactos} contactos).</p>`;
+  }
+  html += `<table><thead><tr><th>#</th><th>Producto</th><th>Conversión</th><th>Ventas</th><th>Contactos</th><th>Valor</th></tr></thead><tbody>`;
+  ranked.forEach((p, i) => {
+    const muestraBaja = p.contactos < MUESTRA_MINIMA_EFECTIVIDAD;
+    const medal = !muestraBaja && i < 3 ? medals[i] : null;
+    html += `<tr${muestraBaja ? ' style="opacity:0.65;"' : ''}>
+      <td>${medal || i + 1}</td>
+      <td>${p.producto}${muestraBaja ? ' <span class="badge warn" title="Menos de ' + MUESTRA_MINIMA_EFECTIVIDAD + ' contactos acumulados — % poco confiable todavía">muestra baja</span>' : ''}</td>
+      <td><span class="badge ${badgeFor(p.conversion_pct)}">${p.conversion_pct}%</span></td>
+      <td>${p.ventas}</td>
+      <td>${p.contactos}</td>
+      <td>${money(p.valor_total)}</td>
+    </tr>`;
+  });
+  html += `</tbody></table></div>`;
+  return html;
+}
+
+// Comparación general entre auditorías (no por producto — el panorama completo), pedido
+// explícito 2026-08-13 ("poder ver la comparación por auditorías"). Usa el mismo listado ya
+// filtrado por el selector de rango de fechas, así que responde al mismo filtro.
+function renderTendenciaGeneral(items) {
+  if (!items) return '';
+  const validos = items.filter((it) => !it.error);
+  if (validos.length < 2) return ''; // una tendencia necesita al menos 2 puntos para decir algo
+  const chron = [...validos].sort((a, b) => (a.fecha < b.fecha ? -1 : 1));
+  const conversionPoints = chron.map((it) => ({ fecha: it.fecha, value: it.conversion_pct || 0 }));
+  const ventasPoints = chron.map((it) => ({ fecha: it.fecha, value: it.ventas || 0 }));
+  return `<div style="margin-top:4px;margin-bottom:20px;">
+    <h3 style="margin:0 0 4px;font-size:15px;color:var(--purple);">📈 Tendencia general — auditorías del rango elegido</h3>
+    <p class="hint" style="margin-top:0;">Cada punto es una auditoría guardada, en orden cronológico. Pasa el mouse sobre un punto o barra para ver la fecha exacta.</p>
+    <div style="display:flex;gap:20px;flex-wrap:wrap;">
+      <div style="flex:1;min-width:260px;">${buildLineChart('trend-conv', conversionPoints, { suffix: '%', color: 'var(--purple)' })}</div>
+      <div style="flex:1;min-width:260px;">${buildBarChart('trend-ventas', ventasPoints, { color: 'var(--purple)' })}</div>
+    </div>
+  </div>`;
+}
+
+function buildLineChart(id, points, opts) {
+  const { suffix = '', color = 'var(--purple)' } = opts || {};
+  const W = 320, H = 150, padL = 8, padR = 8, padT = 16, padB = 10;
+  const innerW = W - padL - padR, innerH = H - padT - padB;
+  const maxVal = Math.max(...points.map((p) => p.value), 1);
+  const niceMax = Math.max(Math.ceil((maxVal * 1.15) / 5) * 5, 5);
+  const n = points.length;
+  const x = (i) => padL + (n === 1 ? innerW / 2 : (i / (n - 1)) * innerW);
+  const y = (v) => padT + innerH - (v / niceMax) * innerH;
+  const pathD = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${x(i).toFixed(1)} ${y(p.value).toFixed(1)}`).join(' ');
+  const gridLines = [0, 0.5, 1].map((f) => {
+    const gy = (padT + innerH * (1 - f)).toFixed(1);
+    return `<line x1="${padL}" y1="${gy}" x2="${W - padR}" y2="${gy}" stroke="var(--border)" stroke-width="1"/>`;
+  }).join('');
+  const dots = points.map((p, i) => `<circle class="tc-dot" data-idx="${i}" cx="${x(i).toFixed(1)}" cy="${y(p.value).toFixed(1)}" r="${i === n - 1 ? 4 : 3}" fill="${color}" stroke="white" stroke-width="2" style="cursor:pointer;"/>`).join('');
+  const last = points[n - 1];
+  const endLabel = `<text x="${x(n - 1).toFixed(1)}" y="${Math.max(y(last.value) - 8, 10).toFixed(1)}" font-size="11" font-weight="700" fill="var(--text)" text-anchor="end">${last.value}${suffix}</text>`;
+  const dataAttr = JSON.stringify(points).replace(/'/g, '&apos;').replace(/"/g, '&quot;');
+  return `<div class="tc-wrap" id="${id}-wrap" style="position:relative;">
+    <div style="font-size:11px;color:var(--gray);font-weight:700;text-transform:uppercase;margin-bottom:4px;">Conversión %</div>
+    <svg id="${id}" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;" data-points="${dataAttr}" data-suffix="${suffix}">
+      ${gridLines}
+      <path d="${pathD}" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      ${dots}
+      ${endLabel}
+    </svg>
+    <div class="tc-tooltip" id="${id}-tip" style="display:none;"></div>
+  </div>`;
+}
+
+function buildBarChart(id, points, opts) {
+  const { color = 'var(--purple)' } = opts || {};
+  const W = 320, H = 150, padL = 8, padR = 8, padT = 16, padB = 10;
+  const innerW = W - padL - padR, innerH = H - padT - padB;
+  const maxVal = Math.max(...points.map((p) => p.value), 1);
+  const niceMax = Math.max(Math.ceil(maxVal * 1.15), 1);
+  const n = points.length;
+  const slot = innerW / n;
+  const barW = Math.min(24, slot * 0.6);
+  const gridLines = [0, 0.5, 1].map((f) => {
+    const gy = (padT + innerH * (1 - f)).toFixed(1);
+    return `<line x1="${padL}" y1="${gy}" x2="${W - padR}" y2="${gy}" stroke="var(--border)" stroke-width="1"/>`;
+  }).join('');
+  const bars = points.map((p, i) => {
+    const cx = padL + slot * i + slot / 2;
+    const barH = (p.value / niceMax) * innerH;
+    const by = padT + innerH - barH;
+    return `<rect class="tc-bar" data-idx="${i}" x="${(cx - barW / 2).toFixed(1)}" y="${by.toFixed(1)}" width="${barW.toFixed(1)}" height="${Math.max(barH, 1).toFixed(1)}" rx="4" fill="${color}" style="cursor:pointer;"/>`;
+  }).join('');
+  const dataAttr = JSON.stringify(points).replace(/'/g, '&apos;').replace(/"/g, '&quot;');
+  return `<div class="tc-wrap" id="${id}-wrap" style="position:relative;">
+    <div style="font-size:11px;color:var(--gray);font-weight:700;text-transform:uppercase;margin-bottom:4px;">Ventas</div>
+    <svg id="${id}" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;" data-points="${dataAttr}" data-suffix="">
+      ${gridLines}
+      ${bars}
+    </svg>
+    <div class="tc-tooltip" id="${id}-tip" style="display:none;"></div>
+  </div>`;
+}
+
+function wireTrendChartHover(id) {
+  const wrap = document.getElementById(id + '-wrap');
+  const tip = document.getElementById(id + '-tip');
+  const svg = document.getElementById(id);
+  if (!wrap || !tip || !svg) return;
+  let points;
+  try { points = JSON.parse(svg.dataset.points); } catch (e) { return; }
+  const suffix = svg.dataset.suffix || '';
+  wrap.onmousemove = (e) => {
+    const el = e.target.closest('.tc-dot, .tc-bar');
+    if (!el) { tip.style.display = 'none'; return; }
+    const idx = +el.dataset.idx;
+    const p = points[idx];
+    if (!p) { tip.style.display = 'none'; return; }
+    const wrapRect = wrap.getBoundingClientRect();
+    const elRect = el.getBoundingClientRect();
+    tip.style.left = (elRect.left - wrapRect.left + elRect.width / 2) + 'px';
+    tip.style.top = (elRect.top - wrapRect.top) + 'px';
+    tip.textContent = `${fmtDateEs(p.fecha)}: ${p.value}${suffix}`;
+    tip.style.display = 'block';
+  };
+  wrap.onmouseleave = () => { tip.style.display = 'none'; };
 }
 
 function renderComparacionProducto(nombre) {

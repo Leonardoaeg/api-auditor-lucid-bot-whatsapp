@@ -71,6 +71,8 @@ Desde el panel **"⚙️ Gestionar tiendas"** puedes agregar, editar o quitar ti
 
 El panel **"📊 Cómo va la operación — histórico por tienda"** acumula las auditorías guardadas de una tienda (contactos, ventas, valor, conversión, por producto) sin volver a llamar la API. Incluye:
 - **Filtro de rango de fechas** (botón "📅 Rango de fechas"): un popover con atajos (Hoy, Ayer, Últimos 7 días, Últimos 30 días, Este mes, Mes anterior, Todo el histórico) y un calendario navegable para elegir un rango libre — filtra tanto el listado de auditorías como los KPIs/tabla por producto, no solo la tabla.
+- **📈 Tendencia general**: un mini-gráfico de conversión % y otro de ventas, una barra/punto por auditoría guardada en orden cronológico, para ver de un vistazo si el rango elegido va mejorando o empeorando.
+- **🏆 Efectividad por producto**: ranking de qué producto convierte mejor (ventas ÷ contactos), con los productos de muestra confiable primero — los que tienen pocos contactos acumulados quedan marcados como "muestra baja" al final, para que un 100% con 1 solo contacto no le gane el primer puesto a un producto real con cientos.
 - Un selector para **comparar un producto entre auditorías guardadas** (ej. un mismo producto entre dos fechas) y ver su tendencia día por día.
 - El listado de auditorías individuales — verlas de nuevo no gasta cuota, se leen del disco.
 
@@ -134,6 +136,18 @@ Para correr `daily-audit-all.js` automáticamente todos los días (audita todas 
 - **Manual (Windows):** usa el Programador de tareas de Windows apuntando a `node.exe daily-audit-all.js` con el directorio de trabajo en esta carpeta.
 - **Manual (cron, Linux/Mac):** `0 7 * * * cd /ruta/a/lucidbot-auditor && node daily-audit-all.js`
 
+## Desplegar en un hosting (Railway u otro)
+
+El proyecto está preparado para correr fuera de tu computadora — en Railway, Render, Fly.io o cualquier hosting que corra Node.js — sin cambiar nada del uso local (todas las variables de entorno son opcionales y, sin definirlas, todo funciona exactamente igual que en `localhost:4545`).
+
+1. Copia `.env.example` a `.env` (o configura las mismas variables en el panel de tu hosting) y ajústalas.
+2. **⚠️ Paso crítico — no te lo saltes:** define `DATA_DIR` apuntando a un **volumen persistente** de tu hosting (en Railway: agrega un "Volume" al servicio). La mayoría de hostings usan disco **efímero** — sin esto, `accounts.local.json` y todo `Informes/` se borran en cada redeploy o reinicio, y pierdes tus tiendas y tu histórico completo.
+3. `npm start` arranca el servidor (`railway.json` ya trae `startCommand`, `healthcheckPath: /api/health` y reinicio automático si falla, para Railway específicamente — otros hostings pueden ignorarlo y usar `npm start` directo).
+4. Una vez desplegado, el mismo dashboard queda accesible desde cualquier dispositivo con la URL que te dé el hosting — no solo desde tu computadora.
+5. `ALLOWED_ORIGINS` controla CORS — con `*` (el valor por defecto) cualquier página o app puede consultar la API del dashboard (`/api/history`, `/api/audit-file`, etc.) directamente vía `fetch`, útil si quieres mostrar estos datos en otro sitio tuyo. Restringe a tus dominios si no lo necesitas abierto.
+
+**⚠️ Este proyecto todavía no tiene ningún login.** Es un riesgo aceptado a propósito mientras solo tú conozcas la URL — pero si vas a publicarla donde cualquiera pueda encontrarla, agrega autenticación primero: hoy cualquiera con el link ve datos reales de tus clientes y puede cambiar los tokens de tus tiendas sin que se le pida ninguna clave.
+
 ## Actualizar a una versión nueva
 
 ```bash
@@ -147,6 +161,7 @@ Tu `accounts.local.json` y todo lo guardado en `Informes/` nunca se tocan ni se 
 
 - **Nunca** se guardan usuarios ni contraseñas de ningún sistema, en ningún archivo. El único dato sensible que este proyecto maneja es el **token de API de Lucid Bot** (una llave de integración, no una contraseña de inicio de sesión), guardado únicamente en `accounts.local.json` (excluido de git).
 - Lucid Sales no tiene API pública — cualquier dato de ahí requiere sesión manual del usuario en su propio navegador, nunca credenciales guardadas.
+- **El dashboard mismo no tiene login.** En `localhost` es un riesgo aceptado (solo tú tienes acceso a tu computadora). Si lo despliegas en un hosting con una URL pública, cualquiera que la conozca ve datos reales de tus clientes y puede cambiar los tokens de tus tiendas — agrega autenticación antes de compartir esa URL. Ver "Desplegar en un hosting" arriba.
 
 ## Límites conocidos
 

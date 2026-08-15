@@ -1,15 +1,45 @@
 // Dashboard local de auditoría Lucid Bot.
 // Uso: node dashboard-server.js  ->  abre http://localhost:4545
+//
+// Listo para hosting (pedido explícito 2026-08-13, "prepararlo para usarlo desde cualquier
+// hosting/repositorio como Railway"): nada de esto cambia el comportamiento local por defecto —
+// cada variable de entorno tiene un valor por defecto idéntico al de siempre. Ver la sección
+// "Desplegar en un hosting" del README antes de publicar esto en internet de verdad: en
+// particular, la mayoría de hostings (Railway incluido) usan disco EFÍMERO — sin un volumen
+// persistente montado en DATA_DIR, accounts.local.json y todo Informes/ se BORRAN en cada
+// redeploy/reinicio. Y este servidor todavía no tiene ningún login (pedido explícito: "dejarlo
+// sin login por ahora") — antes de exponerlo en una URL pública de verdad hay que agregar uno.
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
 const { runAudit } = require("./audit-core.js");
 const { buildDocxBuffer } = require("./report-generator.js");
 
-const PORT = 4545;
-const ACCOUNTS_FILE = path.join(__dirname, "accounts.local.json");
-const AUDITS_DIR = path.join(__dirname, "..", "Informes", "auditorias");
+const PORT = process.env.PORT ? Number(process.env.PORT) : 4545;
+// DATA_DIR: si se define, accounts.local.json y Informes/auditorias/ viven ahí en vez de junto
+// al código — es el patrón para montar un volumen persistente en un hosting (Railway, etc.).
+// Sin DATA_DIR, todo se comporta exactamente igual que siempre (relativo a este archivo).
+const DATA_DIR = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : null;
+const ACCOUNTS_FILE = process.env.ACCOUNTS_FILE
+  ? path.resolve(process.env.ACCOUNTS_FILE)
+  : DATA_DIR ? path.join(DATA_DIR, "accounts.local.json") : path.join(__dirname, "accounts.local.json");
+const AUDITS_DIR = process.env.AUDITS_DIR
+  ? path.resolve(process.env.AUDITS_DIR)
+  : DATA_DIR ? path.join(DATA_DIR, "Informes", "auditorias") : path.join(__dirname, "..", "Informes", "auditorias");
 if (!fs.existsSync(AUDITS_DIR)) fs.mkdirSync(AUDITS_DIR, { recursive: true });
+if (!fs.existsSync(ACCOUNTS_FILE)) fs.mkdirSync(path.dirname(ACCOUNTS_FILE), { recursive: true });
+if (!fs.existsSync(ACCOUNTS_FILE)) fs.writeFileSync(ACCOUNTS_FILE, "{}"); // primer arranque en un volumen vacío
+
+// CORS: permite que otras páginas/apps consulten los datos directamente (pedido explícito
+// 2026-08-13, "conectar con cualquier página o lugar"). Por defecto abierto ("*") para que
+// funcione desde cualquier origen sin configurar nada; para restringirlo a dominios concretos,
+// define ALLOWED_ORIGINS="https://misitio.com,https://otro.com" (separado por comas).
+const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || "*").split(",").map((s) => s.trim()).filter(Boolean);
+function corsOriginFor(req) {
+  if (ALLOWED_ORIGINS.includes("*")) return "*";
+  const origin = req.headers.origin;
+  return origin && ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0] || "";
+}
 
 function readAccounts() {
   return JSON.parse(fs.readFileSync(ACCOUNTS_FILE, "utf8"));
@@ -178,7 +208,21 @@ const MIME = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; cha
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://localhost:${PORT}`);
 
+  // CORS en todas las respuestas (ver ALLOWED_ORIGINS arriba) + respuesta corta al preflight
+  // OPTIONS que el navegador manda automáticamente antes de una llamada cross-origin.
+  res.setHeader("Access-Control-Allow-Origin", corsOriginFor(req));
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  if (req.method === "OPTIONS") { res.writeHead(204); return res.end(); }
+
   try {
+    // Healthcheck para plataformas de hosting (Railway y similares lo llaman antes de dar
+    // tráfico real) — no toca disco ni depende de accounts.local.json, así que responde aunque
+    // el volumen de datos todavía no exista.
+    if (url.pathname === "/api/health" && req.method === "GET") {
+      return sendJson(res, 200, { ok: true, service: "lucidbot-auditor", version: require("./package.json").version });
+    }
+
     if (url.pathname === "/" || url.pathname === "/index.html") {
       const file = path.join(__dirname, "public", "dashboard.html");
       const body = fs.readFileSync(file);
@@ -419,4 +463,7 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, () => {
   console.log(`Dashboard Lucid Bot en http://localhost:${PORT}`);
+  if (DATA_DIR) console.log(`Datos persistentes en: ${DATA_DIR}`);
+  console.log(`accounts.local.json: ${ACCOUNTS_FILE}`);
+  console.log(`Informes/auditorias: ${AUDITS_DIR}`);
 });

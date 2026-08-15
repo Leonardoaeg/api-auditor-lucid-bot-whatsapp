@@ -2,6 +2,14 @@
 
 Todas las novedades importantes de este proyecto se documentan aquí. Para actualizar, ver la sección "Actualizar a una versión nueva" del [README](README.md).
 
+## [1.7.0] — 2026-08-14
+
+Efectividad por producto, tendencia general entre auditorías, y listo para desplegar en un hosting.
+
+- **Nuevo: "🏆 Efectividad por producto" en el histórico.** Ranking de qué producto convierte mejor (ventas ÷ contactos), con los productos de muestra confiable primero — los que tienen pocos contactos acumulados quedan al final marcados como "muestra baja" para que no le ganen el primer puesto a un producto real con volumen (ej. un 100% con 1 solo contacto ya no aparece como "el más efectivo").
+- **Nuevo: "📈 Tendencia general" en el histórico.** Dos mini-gráficos (conversión % y ventas) con una barra/punto por auditoría guardada en orden cronológico, con tooltip al pasar el mouse — responde al mismo filtro de rango de fechas del panel.
+- **Nuevo: listo para desplegar en un hosting (Railway u otro).** `PORT`, `DATA_DIR`/`ACCOUNTS_FILE`/`AUDITS_DIR` y `ALLOWED_ORIGINS` (CORS) ahora se leen de variables de entorno, con los mismos valores por defecto de siempre — el uso local no cambia en nada. Incluye `.env.example`, `railway.json` y un healthcheck en `GET /api/health`. Ver la nueva sección "Desplegar en un hosting" del README — en particular, el aviso de que la mayoría de hostings usan disco efímero y de que el dashboard todavía no tiene login.
+
 ## [1.6.0] — 2026-08-13
 
 Filtro de fechas para el histórico, estilo Meta Ads Manager.
