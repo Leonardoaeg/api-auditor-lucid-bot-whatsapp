@@ -90,6 +90,10 @@ El botón **"📋 Pedir análisis cualitativo"** genera un texto listo para pega
 - Trae los mensajes reales de Meta Ads y los pedidos reales confirmados desde Lucid Sales (esto sí requiere que inicies sesión ahí manualmente — nunca se automatiza ni se guardan contraseñas).
 - Desglosa automáticamente los pedidos del rango auditado por canal (WhatsApp / Shopify / otros), a partir del listado real de pedidos de Lucid Sales.
 
+### 7. Informe profundo (opcional, requiere navegador — lento pero exhaustivo)
+
+El botón **"📄 Pedir informe profundo"** es un TERCER modo, distinto del análisis cualitativo: en vez de una muestra del 10%, lee cada chat COMPLETO (hasta 200 por corrida) para encontrar bugs concretos de comportamiento del bot que el motor automático no puede detectar (son juicios sobre el hilo completo de la conversación, no datos estructurados de la API) — por ejemplo: el bot vuelve a saludar a mitad de una conversación, manda 5+ fotos seguidas sin que nadie responda, describe el producto equivocado, ignora una pregunta directa, repite la misma pregunta, o falla al mandar una foto pedida. También agrega los errores técnicos vistos en "Ver acciones ejecutadas" de cada chat en una tabla contada. El resultado: un informe con cita textual y la regla/flujo exacto a corregir por cada falla, más un orden de ataque priorizado — úsalo cuando necesites cazar bugs reales del bot, no para la auditoría de ventas de todos los días.
+
 ## Usar con un agente de código
 
 Este proyecto es un servidor Node.js normal — cualquier agente de código con acceso a terminal puede operarlo. Trae dos archivos de instrucciones para que el agente entienda el proyecto automáticamente, sin que se los tengas que explicar:

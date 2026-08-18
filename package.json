@@ -1,6 +1,6 @@
 {
   "name": "lucidbot-auditor",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "description": "Auditor automatizado de conversaciones y ventas de Lucid Bot, vía API, con diagnóstico por producto y dashboard visual.",
   "main": "dashboard-server.js",
   "scripts": {

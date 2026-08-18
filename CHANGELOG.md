@@ -2,6 +2,12 @@
 
 Todas las novedades importantes de este proyecto se documentan aquí. Para actualizar, ver la sección "Actualizar a una versión nueva" del [README](README.md).
 
+## [1.8.0] — 2026-08-18
+
+Nuevo tercer modo de auditoría: informe profundo leyendo cada chat completo.
+
+- **Nuevo: botón "📄 Pedir informe profundo".** Distinto del análisis cualitativo (muestra 10%, campos estructurados): lee cada chat COMPLETO (hasta 200 por corrida, mismo tope que ya usa el resto del proyecto) + el panel "Ver acciones ejecutadas" de cada uno, para encontrar bugs de comportamiento del bot imposibles de detectar con reglas/regex sobre datos estructurados — el bot vuelve a saludar a mitad de conversación, bombardea de fotos, describe el producto equivocado, ignora una pregunta directa, repite la misma pregunta, o falla al mandar una foto pedida. Clasifica el embudo en 6 etapas (E0-E5), agrega los errores técnicos vistos en una tabla contada, arma un desglose por producto con recomendación específica, un diagnóstico marketing/bot, un orden de ataque priorizado, y casos testigo para reproducir cada falla en el simulador de LucidBot. Motivado por un informe real (500 chats de una cuenta, leídos a mano) mucho más accionable que la salida del auditor automático — en vez de intentar replicar ese nivel de detalle con reglas frágiles, se formalizó como un tercer modo deliberadamente lento y exhaustivo.
+
 ## [1.7.0] — 2026-08-14
 
 Efectividad por producto, tendencia general entre auditorías, y listo para desplegar en un hosting.

@@ -141,6 +141,66 @@ function buildQualitativePrompt({ accountId, accountName, from }) {
   ].join("\n");
 }
 
+// Informe profundo (pedido explícito 2026-08-18, tras ver un informe real hecho leyendo 500
+// chats a mano — mucho más accionable que el análisis cualitativo de muestra 10%: encuentra
+// fallas de COMPORTAMIENTO del bot con cita textual y regla/flujo exacto a tocar, cosa que el
+// motor JS nunca podrá detectar de forma confiable con reglas/regex porque requiere leer el
+// HILO COMPLETO de cada chat con criterio, no solo el último mensaje del bot). No reemplaza el
+// análisis cualitativo (que es rápido, 10% de muestra, bueno para causa raíz estadística) ni el
+// auditor JS (rápido, 100% de cobertura, bueno para verificar ventas) — es un TERCER modo,
+// deliberadamente lento y exhaustivo, para cuando se necesita encontrar bugs concretos del bot.
+function buildDeepAuditPrompt({ accountId, accountName, from }) {
+  const dateSlug = String(from).slice(0, 10);
+  const slug = getAccountSlug(accountId);
+  const auditFile = `Informes/auditorias/${slug}/${accountId}_${dateSlug}.json`;
+  const outFile = `Informes/auditorias/${slug}/${dateSlug}-${slug.toLowerCase()}-informe-profundo.md`;
+  return [
+    `Necesito un INFORME PROFUNDO de fallas del bot para "${accountName}" (acc=${accountId}) — leyendo cada chat completo, no solo campos estructurados. Este es un modo distinto y mucho más lento que la auditoría normal: el objetivo es encontrar bugs concretos de COMPORTAMIENTO del bot con evidencia textual, no solo contar ventas.`,
+    ``,
+    `PASO 0 — Alcance: si existe ${auditFile}, úsalo como referencia del rango/total ya auditado (campo "rango", "total_contactos"). Si no existe o quieres un rango distinto, pídeme fecha/hora exacta antes de arrancar. Analiza HASTA 200 conversaciones por corrida (mismo límite que la auditoría normal) — si hay más, procesa las primeras 200 por orden visible en el inbox, dime cuántas quedan pendientes, y ofrece continuar en un segundo lote sin repetir chats ya leídos.`,
+    ``,
+    `PASO 1 — Lee cada chat COMPLETO vía Browser tool (todo el hilo, no solo el último mensaje): entra a panel.lucidbot.co/en/inbox?acc=${accountId}, filtra por fecha, y abre cada conversación una por una. Para cada una: (a) lee el hilo completo con get_page_text, (b) abre "Ver acciones ejecutadas" (parte inferior derecha) y anota cualquier error técnico que aparezca ahí (mensaje exacto + tipo).`,
+    ``,
+    `PASO 2 — Clasifica cada chat en UNA etapa del embudo (igual vocabulario que usa el resto de este proyecto, solo que aquí se reporta de forma compacta):`,
+    `  - E0 — No pasó del saludo: el bot mandó el mensaje inicial y el cliente nunca respondió, o el chat nunca avanzó de ahí.`,
+    `  - E1 — Respondió pero no avanzó: hubo mensaje(s) del cliente, pero nunca llegó a dar talla/color/modelo/cantidad ni preguntó precio.`,
+    `  - E2 — Llegó a talla/color/modelo/cantidad: dio detalles del producto pero no hay evidencia de que viera el precio, o se fue justo ahí.`,
+    `  - E3 — Vio el precio y se fue: el bot dio el valor y el cliente no volvió a responder.`,
+    `  - E4 — El bot le pidió los datos (nombre/dirección/teléfono) pero no llegó al resumen.`,
+    `  - E5 — Llegó al resumen del pedido (con o sin confirmación final — la confirmación de venta ya la cubre la auditoría normal, aquí interesa el embudo).`,
+    `Cuenta cuántos chats cayeron en cada etapa y su % sobre el total leído — este es el "Los números" / "El embudo" del informe.`,
+    ``,
+    `PASO 3 — Detecta estas 7 fallas de comportamiento del bot en cada chat (pueden aplicar varias a la vez). Para CADA falla que encuentres, guarda: contact_id, cita textual literal (nunca resumas ni inventes), y a qué producto/flujo pertenece:`,
+    `  - saludo_a_mitad: el bot vuelve a saludar ("¡Hola! Soy [nombre] de [tienda]...") en medio de una conversación que ya había arrancado — no es el primer mensaje.`,
+    `  - bombardeo_fotos: 5 o más fotos/videos seguidos del bot sin que el cliente haya preguntado o respondido nada entre medio.`,
+    `  - producto_equivocado: el bot describe/muestra un producto DISTINTO al que el cliente pidió o mostró interés (compara el nombre que el cliente escribió o el producto del anuncio contra lo que el bot realmente ofrece).`,
+    `  - ignora_pregunta_directa: el cliente hace una pregunta concreta (precio, talla, disponibilidad, envío) y la respuesta del bot no la contesta — da otra cosa, repite una ficha de producto, o saluda de nuevo.`,
+    `  - pregunta_repetida: el bot pregunta EXACTAMENTE lo mismo dos o más veces en la misma conversación (señal de que perdió el contexto).`,
+    `  - foto_pedida_no_llega: el cliente pide ver una foto/color/detalle específico y el bot responde que no tiene imágenes, o el envío de la imagen falla.`,
+    `  - error_tecnico: cualquier error visto en "Ver acciones ejecutadas" (mensaje vacío, falla de API, modelo cortado a media respuesta, etc.) — anota el mensaje exacto del error.`,
+    `Para cada falla, cuenta cuántos chats la tienen en total y desglosado por producto — así se arma la tabla de errores técnicos (agrupando por mensaje de error exacto) y la sección de fallas con ejemplos.`,
+    ``,
+    `PASO 4 — Por cada producto con chats en la muestra, arma una fila con: chats, ventas, % cierre, en qué etapa muere más gente, la falla dominante de ese producto (la más frecuente de las 7 de arriba), y una recomendación concreta y accionable (qué regla/flujo/campo tocar — sé específico: nombre del campo, número de flujo si lo ves en la URL o en la config, no una recomendación genérica).`,
+    ``,
+    `PASO 5 — Diagnóstico de causa: para cada falla encontrada, clasifícala en UNA categoría — "Marketing" (el problema es el anuncio/atribución, no el bot), "Bot / flujo" (una regla o secuencia del bot está mal armada), o "Bot / modelo" (el modelo de IA detrás del bot es insuficiente — se le olvida contexto, ignora instrucciones explícitas del prompt, corta respuestas). Prioriza por impacto (cuántos chats/cuánta plata mueve) y esfuerzo, en una lista ordenada de "qué atacar primero".`,
+    ``,
+    `PASO 6 — Para cada falla principal, deja una conversación testigo (contact_id) y el mensaje exacto que la reproduce, para poder probarla de nuevo en el simulador de LucidBot después de corregir la regla.`,
+    ``,
+    `FORMATO DE SALIDA — usa exactamente esta estructura markdown (títulos, tablas y orden), como el ejemplo real que ya validamos:`,
+    `  1. Encabezado: cuántas conversaciones, cuántas son nuevas del rango exacto, canal, si fue de solo lectura.`,
+    `  2. "Los números": tabla con conversaciones auditadas, ventas con etiqueta real de Lucid Sales, tasa de cierre, profundidad promedio de mensajes del cliente.`,
+    `  3. "El embudo: dónde muere la plata": tabla E0-E5 con chats y % (del PASO 2), con la etapa/las etapas de mayor pérdida resaltadas.`,
+    `  4. "FALLAS DEL BOT": una sub-sección por cada falla del PASO 3 que tenga casos, ordenada por impacto (🔴 alto / 🟠 medio), con: cuántos casos, 2-3 citas textuales reales con contact_id, la hipótesis de causa con evidencia, y "Dónde tocar" (específico).`,
+    `  5. "Errores técnicos": tabla de mensajes de error exactos (agrupados) × veces vistos × qué significa en una frase.`,
+    `  6. "Producto por producto": tabla del PASO 4.`,
+    `  7. "Diagnóstico: ¿marketing o bot?": tabla del PASO 5 (causa × chats × tipo × impacto).`,
+    `  8. "Orden de ataque": lista numerada priorizada.`,
+    `  9. "Cómo replicar cada falla": tabla del PASO 6 (falla × conversación testigo × mensaje exacto).`,
+    `Guarda el resultado completo en ${outFile} (formato .md, mismo estilo que ya usamos). Si hiciste un lote parcial (por el tope de 200), dilo explícitamente al inicio del archivo y en tu resumen.`,
+    `Al terminar, avísame con el resumen ejecutivo: la falla #1 por impacto, y las 2-3 acciones de mayor prioridad.`,
+  ].join("\n");
+}
+
 function sendJson(res, status, data) {
   const body = JSON.stringify(data);
   res.writeHead(status, { "Content-Type": "application/json; charset=utf-8", "Content-Length": Buffer.byteLength(body) });
@@ -413,6 +473,19 @@ const server = http.createServer(async (req, res) => {
       const logPath = requestsLogPath(accountId);
       fs.appendFileSync(logPath, entry);
       return sendJson(res, 200, { prompt, savedTo: `Informes/auditorias/${getAccountSlug(accountId)}/solicitudes_analisis_cualitativo.md` });
+    }
+
+    // Informe profundo (pedido explícito 2026-08-18): lee cada chat completo en vez de solo
+    // campos estructurados — mucho más lento, pero encuentra bugs de comportamiento del bot que
+    // el motor JS no puede detectar de forma confiable. Ver buildDeepAuditPrompt arriba.
+    if (url.pathname === "/api/deep-audit-request" && req.method === "POST") {
+      const { accountId, from, accountName } = await readBody(req);
+      if (!accountId || !from) return sendJson(res, 400, { error: "Faltan accountId o from" });
+      const prompt = buildDeepAuditPrompt({ accountId, accountName: accountName || getAccountName(accountId), from });
+      const entry = `\n## ${new Date().toISOString()} — ${accountName || accountId} — ${String(from).slice(0, 10)}\n\n${prompt}\n`;
+      const logPath = path.join(storeDir(accountId), "solicitudes_informe_profundo.md");
+      fs.appendFileSync(logPath, entry);
+      return sendJson(res, 200, { prompt, savedTo: `Informes/auditorias/${getAccountSlug(accountId)}/solicitudes_informe_profundo.md` });
     }
 
     // --- Gestión de tiendas (solo token de API de Lucid Bot — NUNCA contraseñas) ---

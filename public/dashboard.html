@@ -231,10 +231,11 @@
     <button id="run">Ejecutar auditoría</button>
     <button id="download" class="secondary" disabled>⬇ Descargar informe Word</button>
     <button id="request-qual" class="secondary" disabled>📋 Pedir análisis cualitativo</button>
+    <button id="request-deep" class="secondary" disabled title="Lee cada chat completo (hasta 200 por corrida) para encontrar bugs de comportamiento del bot con cita textual — mucho más lento que el análisis cualitativo, pero mucho más profundo.">📄 Pedir informe profundo</button>
     <span id="status"></span>
   </div>
 
-  <div class="pending-note" style="background:#EFF6FF;color:#1E3A8A;">⚠️ Antes de pedir el análisis cualitativo o los mensajes de Lucid Sales: es UNA sola cuenta de Lucid Sales para todas las tiendas — verifica en el switcher (arriba a la izquierda del panel) que la tienda ACTIVA es la correcta antes de leer cualquier dato. Si el buscador de tiendas no encuentra el nombre esperado, no significa que falte acceso — revisa la lista completa.</div>
+  <div class="pending-note" style="background:#EFF6FF;color:#1E3A8A;">⚠️ Antes de pedir el análisis cualitativo, el informe profundo o los mensajes de Lucid Sales: es UNA sola cuenta de Lucid Sales para todas las tiendas — verifica en el switcher (arriba a la izquierda del panel) que la tienda ACTIVA es la correcta antes de leer cualquier dato. Si el buscador de tiendas no encuentra el nombre esperado, no significa que falte acceso — revisa la lista completa.</div>
 
   <div id="qual-copied" class="pending-note" style="display:none"></div>
   <div id="results"></div>
@@ -771,6 +772,7 @@ async function verHistorico(accountId, fecha) {
     currentAccountId = accountId; currentFrom = fecha; currentAccountName = data.accountName;
     $('download').disabled = false;
     $('request-qual').disabled = false;
+    $('request-deep').disabled = false;
     $('history-status').textContent = `Mostrando auditoría guardada del ${fecha} (leída de disco, no es una consulta en vivo).`;
     $('results').scrollIntoView({ behavior: 'smooth' });
   } catch (err) {
@@ -1351,6 +1353,7 @@ $('run').addEventListener('click', async () => {
     currentAccountName = data.accountName;
     $('download').disabled = false;
     $('request-qual').disabled = false;
+    $('request-deep').disabled = false;
     $('qual-copied').style.display = 'none';
     $('status').textContent = 'Listo.';
     loadHistory(accountId);
@@ -1377,6 +1380,19 @@ $('request-qual').addEventListener('click', async () => {
   const box = $('qual-copied');
   box.style.display = 'block';
   box.innerHTML = `<b>✅ Solicitud guardada en ${data.savedTo} y copiada al portapapeles.</b>Pégala en cualquier chat de Claude Code para que arranque el análisis:\n\n${data.prompt}`;
+});
+
+$('request-deep').addEventListener('click', async () => {
+  if (!currentAccountId || !currentFrom) return;
+  const res = await fetch('/api/deep-audit-request', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ accountId: currentAccountId, from: currentFrom, accountName: currentAccountName }),
+  });
+  const data = await res.json();
+  try { await navigator.clipboard.writeText(data.prompt); } catch (e) { /* clipboard puede fallar sin HTTPS/foco; el texto igual queda guardado y visible abajo */ }
+  const box = $('qual-copied');
+  box.style.display = 'block';
+  box.innerHTML = `<b>✅ Solicitud de informe profundo guardada en ${data.savedTo} y copiada al portapapeles.</b> Es una corrida LENTA (lee cada chat completo, hasta 200 por vez) — pégala en cualquier chat de Claude Code cuando tengas tiempo de dejarla correr:\n\n${data.prompt}`;
 });
 
 (async function init() {
